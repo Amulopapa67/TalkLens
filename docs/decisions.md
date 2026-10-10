@@ -47,3 +47,10 @@
   - 决定：`tlctl record` 只有在标题命中 `.lens-dev.json` 白名单时才保留原文，此时 `meta.source = "self-chat"`，`window.title` 一律写成 `<self-chat>`。没命中时全部脱敏，`meta.source = "redacted-live"`，这类文件不能放进 fixtures/snapshots。
   - 理由：나와의 채팅 的标题是 Lipper 的昵称，fixtures 会进开源仓库。
   - 日期：2026-10-10
+- **D-013 TalkLensCore 的几个实现取舍**
+  - "Hangul 占比 ≥ 0.3"按**词**算，不按字母算：`Deadline은 Friday까지예요` 按字母只有 0.26，会被误判为不翻。占比低于阈值但含 Hangul 音节时，交给 `NLLanguageRecognizer` 决定。
+  - URL、@提及不参与语言判断；只有 @提及的消息不翻。
+  - Redactor 只有整串都是时间/日期标签（≤ 24 字）才保留原样，比旧探针更严。
+  - TranscriptDiffer 用 id 集合一次扫描：中间某条被编辑或删除不算 reset，变化的 id 记进 `appended`。只有新旧完全没有共同 id 才算 reset。
+  - `parseDividerDate` 要求整行就是日期（可带星期），避免把提到日期的普通消息当成分隔行。
+  - 日期：2026-10-10
