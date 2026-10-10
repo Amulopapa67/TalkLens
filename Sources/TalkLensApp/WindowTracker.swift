@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Follows KakaoTalk's current chat window: frontmost/running state via NSWorkspace, window geometry and
-// content changes via AXObserver, fallback polling only while KakaoTalk is frontmost.
+// content changes via AXObserver, a cheap fallback poll only while KakaoTalk is frontmost and the panel is
+// visible.
 //
 // Read-only: never activates, raises, focuses, scrolls or otherwise touches KakaoTalk.
 
@@ -40,16 +41,28 @@ final class WindowTracker: AXEventSink {
                                       "AXWindowDeminiaturized", "AXTitleChanged"]
     static let contentNotifications = ["AXRowCountChanged", "AXCreated", "AXValueChanged", "AXLayoutChanged",
                                        "AXSelectedChildrenChanged"]
-    /// Also registered on the application element, which receives them for descendant elements (a window
-    /// registration may only see its own element). AXValueChanged is left out here so typing in the input box
-    /// does not trigger reads. Debounce + max-wait bound the read rate either way.
-    static let appContentNotifications = ["AXRowCountChanged", "AXCreated"]
+    /// Also registered on the application element, which receives it for descendant elements (a window
+    /// registration may only see its own element). A new message posts AXRowCountChanged on the transcript
+    /// AXTable (verified on KakaoTalk 26.8.0); events from any other table (other chat windows) only trigger
+    /// the cheap probe. App-level AXCreated is not registered: tooltips and popovers post it constantly.
+    static let appContentNotifications = ["AXRowCountChanged"]
 
     static let contentDebounce: Duration = .milliseconds(120)
     /// A continuous stream of content events still triggers a read at least this often.
     static let contentMaxWait: Duration = .milliseconds(400)
     static let pollInterval: Duration = .seconds(1)
     static let pollQuietPeriod: Duration = .seconds(5)
+    /// The fallback poll does a full read at least this often even when the cheap probe sees no change.
+    static let fullReadSafetyInterval: Duration = .seconds(10)
+    /// Poll read cadence while there is no tracked transcript (state != .tracking).
+    static let untrackedPollInterval: Duration = .seconds(3)
+    /// App-level AXWindowCreated (also posted for tooltips/popovers) is coalesced this long.
+    static let windowCreatedDebounce: Duration = .milliseconds(300)
+    /// A single transient "transcript not found" is retried after this delay before it is reported.
+    static let notFoundRetryDelay: Duration = .milliseconds(400)
+    static let notFoundGrace: Duration = .milliseconds(1500)
+    /// Upper bound on the main-thread time spent registering observers in one attach/bind.
+    static let registrationBudget: Duration = .seconds(1)
 
     var onStateChange: ((State) -> Void)?
     /// The instant is when the first content event (or poll) behind this read happened.
@@ -61,6 +74,9 @@ final class WindowTracker: AXEventSink {
     private(set) var kakaoFrontmost = false
     private(set) var kakaoRunning = false
     private(set) var paused = false
+    /// Whether the panel can currently be seen (set by AppController). While false nothing is read: requests
+    /// only mark the content dirty, and one read happens when the panel becomes visible again.
+    private(set) var contentWanted = false
     private(set) var geometry = Geometry(windowAX: nil, inputAX: nil, minimized: false, stopwatch: nil)
 
     private let reader: AXReader
@@ -70,25 +86,40 @@ final class WindowTracker: AXEventSink {
     private var started = false
     private var routerToken = 0
     private var observation: AXObservation?
-    private var observedWindow: LiveAXNode?
+    private var observedWindow: AXElementRef?
+    /// Transcript AXTable of the last successful read (filters app-level AXRowCountChanged).
+    private var transcriptTable: AXElementRef?
     /// Input box position relative to the window's bottom-left corner (AX coordinates).
     private var inputInsets: (left: CGFloat, right: CGFloat, fromBottom: CGFloat, height: CGFloat)?
 
     private var workspaceTokens: [NSObjectProtocol] = []
     private var debounceTask: Task<Void, Never>?
     private var debounceFirstEventAt: ContinuousClock.Instant?
+    /// True when at least one debounced event came from the followed window/table (→ full read); otherwise
+    /// the debounced work is only a cheap probe.
+    private var debounceNeedsRead = false
     private var pollTask: Task<Void, Never>?
     private var permissionTask: Task<Void, Never>?
     private var delayedRefreshTask: Task<Void, Never>?
+    private var windowCheckTask: Task<Void, Never>?
+    private var retryTask: Task<Void, Never>?
 
     private var readInFlight = false
     private var readPending = false
+    private var readDirty = false
+    private var probeInFlight = false
     private var geometryInFlight = false
     private var geometryPending = false
     private var geometryPendingStopwatch: Stopwatch?
+    /// When the most recent fresh geometry read started; a full read requested before that must not
+    /// overwrite the newer window frame.
+    private var lastGeometryReadAt: ContinuousClock.Instant?
     private var lastContentEventAt = ContinuousClock.now
+    private var lastFullReadAt: ContinuousClock.Instant?
     /// First content event not yet covered by a started read.
     private var pendingTriggerAt: ContinuousClock.Instant?
+    private var notFoundStreak = 0
+    private var notFoundSince: ContinuousClock.Instant?
 
     init(reader: AXReader, diagnostics: Diagnostics) {
         self.reader = reader
@@ -113,14 +144,15 @@ final class WindowTracker: AXEventSink {
         let center = NSWorkspace.shared.notificationCenter
         for token in workspaceTokens { center.removeObserver(token) }
         workspaceTokens.removeAll()
-        debounceTask?.cancel()
-        pollTask?.cancel()
-        permissionTask?.cancel()
-        delayedRefreshTask?.cancel()
+        for task in [debounceTask, pollTask, permissionTask, delayedRefreshTask, windowCheckTask, retryTask] {
+            task?.cancel()
+        }
         debounceTask = nil
         pollTask = nil
         permissionTask = nil
         delayedRefreshTask = nil
+        windowCheckTask = nil
+        retryTask = nil
         detach()
         AXEventRouter.unregister(routerToken)
     }
@@ -130,6 +162,21 @@ final class WindowTracker: AXEventSink {
         paused = value
         updatePolling()
         requestRead()
+    }
+
+    /// Called by AppController whenever panel visibility is recomputed.
+    func setContentWanted(_ value: Bool) {
+        guard contentWanted != value else { return }
+        contentWanted = value
+        updatePolling()
+        guard value, started else { return }
+        if readDirty {
+            requestRead()
+        } else {
+            // Scrolling posts no notification; a cheap probe catches anything that changed while hidden.
+            probeAndMaybeRead()
+            geometryChanged(stopwatch: nil)
+        }
     }
 
     /// Re-checks permission and process, (re)attaches observers and reads once. Safe to call any time.
@@ -166,10 +213,17 @@ final class WindowTracker: AXEventSink {
             if made.error == .apiDisabled { handlePermissionLoss() }
             return
         }
+        guard let appNode = KakaoProcess.applicationNode() else {
+            // KakaoTalk quit (or is quitting) between the process check and here: retry shortly.
+            obs.invalidate()
+            scheduleRefresh(after: .seconds(2))
+            return
+        }
         observation = obs
-        guard let appNode = KakaoProcess.applicationNode() else { return }
-        let result = obs.add(Self.appNotifications + Self.appContentNotifications, to: appNode.element)
-        logger.info("attached app observer registered=\(result.registered) unsupported=\(result.unsupported) errors=\(result.otherErrors)")
+        let deadline = ContinuousClock.now + Self.registrationBudget
+        let result = obs.add(Self.appNotifications + Self.appContentNotifications, to: appNode.element,
+                             deadline: deadline)
+        logger.info("attached app observer registered=\(result.registered) unsupported=\(result.unsupported) errors=\(result.otherErrors) skipped=\(result.skipped)")
         if result.permissionDenied {
             handlePermissionLoss()
         } else if result.registered == 0 {
@@ -183,25 +237,39 @@ final class WindowTracker: AXEventSink {
     private func detach() {
         debounceTask?.cancel()
         debounceTask = nil
+        debounceNeedsRead = false
+        windowCheckTask?.cancel()
+        windowCheckTask = nil
+        retryTask?.cancel()
+        retryTask = nil
         observation?.invalidate()
         observation = nil
         observedWindow = nil
+        transcriptTable = nil
         inputInsets = nil
         geometryPending = false
         geometryPendingStopwatch = nil
+        resetNotFound()
     }
 
-    private func bindWindow(_ window: LiveAXNode) {
-        if let current = observedWindow, CFEqual(current.element, window.element) { return }
+    /// Follows `window`. Always stores the latest reference; observers are only (re)registered when the
+    /// underlying element changes.
+    private func bindWindow(_ window: AXElementRef) {
+        if let current = observedWindow, current.isSame(as: window) {
+            observedWindow = window
+            return
+        }
         if let current = observedWindow { observation?.removeAll(for: current.element) }
         observedWindow = window
+        transcriptTable = nil
         inputInsets = nil
         // Client-side IPC timeout for our own reads of this element (does not modify KakaoTalk).
         AXUIElementSetMessagingTimeout(window.element, 0.3)
         if let obs = observation {
-            let w = obs.add(Self.windowNotifications, to: window.element)
-            let c = obs.add(Self.contentNotifications, to: window.element)
-            logger.info("bound window registered=\(w.registered + c.registered) unsupported=\(w.unsupported + c.unsupported)")
+            let deadline = ContinuousClock.now + Self.registrationBudget
+            let w = obs.add(Self.windowNotifications, to: window.element, deadline: deadline)
+            let c = obs.add(Self.contentNotifications, to: window.element, deadline: deadline)
+            logger.info("bound window registered=\(w.registered + c.registered) unsupported=\(w.unsupported + c.unsupported) skipped=\(w.skipped + c.skipped)")
             if w.permissionDenied || c.permissionDenied { handlePermissionLoss() }
         }
         geometryChanged(stopwatch: nil)
@@ -210,12 +278,13 @@ final class WindowTracker: AXEventSink {
     private func unbindWindow() {
         if let current = observedWindow { observation?.removeAll(for: current.element) }
         observedWindow = nil
+        transcriptTable = nil
         inputInsets = nil
         geometry = Geometry(windowAX: nil, inputAX: nil, minimized: false, stopwatch: nil)
         onGeometry?(geometry)
     }
 
-    func axEventReceived(_ name: String) {
+    func axEventReceived(_ name: String, element: AXElementRef) {
         diagnostics.recordAXEvent()
         switch name {
         case "AXMoved", "AXResized":
@@ -230,17 +299,24 @@ final class WindowTracker: AXEventSink {
         case "AXUIElementDestroyed":
             unbindWindow()
             requestRead()
-        case "AXTitleChanged", "AXFocusedWindowChanged", "AXMainWindowChanged", "AXWindowCreated":
+        case "AXWindowCreated":
+            // Tooltips and popovers post this too; only re-evaluate which chat window to follow.
+            scheduleWindowReevaluation()
+        case "AXTitleChanged", "AXFocusedWindowChanged", "AXMainWindowChanged":
             requestRead()
+        case "AXRowCountChanged":
+            // Row-count changes of other tables (e.g. another open chat window) only warrant a cheap probe.
+            let ours = transcriptTable.map { $0.isSame(as: element) } ?? true
+            contentEvent(needsRead: ours)
         default:
-            lastContentEventAt = .now
-            if pendingTriggerAt == nil { pendingTriggerAt = lastContentEventAt }
-            scheduleDebouncedRead()
+            contentEvent(needsRead: true)
         }
     }
 
     // MARK: - Geometry (move/resize drive the panel directly)
 
+    /// At most one fresh geometry read is in flight; bursts (AXResized arrives at ~60 Hz) collapse into one
+    /// follow-up read whose result is the latest frame.
     private func geometryChanged(stopwatch: Stopwatch?) {
         guard let window = observedWindow else { return }
         if geometryInFlight {
@@ -249,11 +325,12 @@ final class WindowTracker: AXEventSink {
             return
         }
         geometryInFlight = true
+        lastGeometryReadAt = .now
         Task {
             let g = await geometryReader.geometry(of: window)
             geometryInFlight = false
             // Ignore results for a window we no longer follow.
-            if let current = observedWindow, CFEqual(current.element, window.element) {
+            if let g, let current = observedWindow, current.isSame(as: window) {
                 applyGeometry(g, stopwatch: stopwatch)
             }
             if geometryPending {
@@ -266,12 +343,19 @@ final class WindowTracker: AXEventSink {
     }
 
     private func applyGeometry(_ g: WindowGeometry, stopwatch: Stopwatch?) {
-        geometry.minimized = g.minimized
+        var next = geometry
+        next.minimized = g.minimized
         if let frame = g.frame {
-            geometry.windowAX = frame
-            geometry.inputAX = inputFrame(for: frame)
+            next.windowAX = frame
+            next.inputAX = inputFrame(for: frame)
         }
-        geometry.stopwatch = stopwatch
+        next.stopwatch = stopwatch
+        // Poll-driven refreshes that found nothing new do not touch the panel.
+        if stopwatch == nil, next.windowAX == geometry.windowAX, next.inputAX == geometry.inputAX,
+           next.minimized == geometry.minimized {
+            return
+        }
+        geometry = next
         onGeometry?(geometry)
     }
 
@@ -292,6 +376,13 @@ final class WindowTracker: AXEventSink {
 
     // MARK: - Reads
 
+    private func contentEvent(needsRead: Bool) {
+        lastContentEventAt = .now
+        if needsRead, pendingTriggerAt == nil { pendingTriggerAt = lastContentEventAt }
+        if needsRead { debounceNeedsRead = true }
+        scheduleDebouncedRead()
+    }
+
     private func scheduleDebouncedRead() {
         let now = ContinuousClock.now
         if debounceTask != nil, let first = debounceFirstEventAt, now - first >= Self.contentMaxWait {
@@ -304,17 +395,40 @@ final class WindowTracker: AXEventSink {
             guard !Task.isCancelled, let self else { return }
             self.debounceTask = nil
             self.debounceFirstEventAt = nil
-            self.requestRead()
+            let needsRead = self.debounceNeedsRead
+            self.debounceNeedsRead = false
+            if needsRead { self.requestRead() } else { self.probeAndMaybeRead() }
+        }
+    }
+
+    private func scheduleWindowReevaluation() {
+        windowCheckTask?.cancel()
+        windowCheckTask = Task { [weak self] in
+            try? await Task.sleep(for: WindowTracker.windowCreatedDebounce)
+            guard !Task.isCancelled, let self else { return }
+            self.windowCheckTask = nil
+            guard self.started, self.kakaoRunning else { return }
+            guard self.contentWanted else {
+                self.markSkippedHidden()
+                return
+            }
+            let current = self.observedWindow
+            if await self.reader.chatWindowChanged(from: current) { self.requestRead() }
         }
     }
 
     func requestRead() {
         guard started, kakaoRunning, state != .noPermission || AccessibilityAccess.isGranted else { return }
+        guard contentWanted else {
+            markSkippedHidden()
+            return
+        }
         if readInFlight {
             readPending = true
             return
         }
         readInFlight = true
+        readDirty = false
         let requestedAt = ContinuousClock.now
         let triggeredAt = pendingTriggerAt ?? requestedAt
         pendingTriggerAt = nil
@@ -322,7 +436,8 @@ final class WindowTracker: AXEventSink {
         Task {
             let outcome = resolveOnly ? await reader.resolveWindow() : await reader.read(requestedAt: requestedAt)
             readInFlight = false
-            handle(outcome, triggeredAt: triggeredAt)
+            if !resolveOnly { lastFullReadAt = .now }
+            handle(outcome, requestedAt: requestedAt, triggeredAt: triggeredAt)
             if readPending {
                 readPending = false
                 requestRead()
@@ -330,22 +445,50 @@ final class WindowTracker: AXEventSink {
         }
     }
 
-    private func handle(_ outcome: ReadOutcome, triggeredAt: ContinuousClock.Instant) {
+    private func markSkippedHidden() {
+        readDirty = true
+        diagnostics.recordSkippedHiddenRead()
+    }
+
+    /// Cheap probe (row count + last row frame + window size); a full read only when something changed or
+    /// there is nothing to compare with.
+    private func probeAndMaybeRead() {
+        guard started, kakaoRunning, contentWanted, !paused, !probeInFlight, !readInFlight else { return }
+        probeInFlight = true
+        Task {
+            let result = await reader.probe()
+            probeInFlight = false
+            diagnostics.recordCheapPollCheck()
+            if result != .unchanged { requestRead() }
+        }
+    }
+
+    private func handle(_ outcome: ReadOutcome, requestedAt: ContinuousClock.Instant,
+                        triggeredAt: ContinuousClock.Instant) {
         guard started else { return }
         switch outcome {
-        case .read(let result, let window):
+        case .read(let result, let window, let table):
             diagnostics.recordRead(result.elapsedMilliseconds)
+            resetNotFound()
             bindWindow(window)
+            transcriptTable = table
             if let frame = result.windowFrame {
-                geometry.windowAX = frame
                 rememberInput(result.inputFrame, window: frame)
-                geometry.inputAX = result.inputFrame
+                // A fresh geometry read that started after this read was requested is newer: keep its frame.
+                let newerGeometry = lastGeometryReadAt.map { $0 > requestedAt } ?? false
+                if !newerGeometry || geometry.windowAX == nil {
+                    geometry.windowAX = frame
+                    geometry.inputAX = result.inputFrame
+                } else if let current = geometry.windowAX {
+                    geometry.inputAX = inputFrame(for: current)
+                }
                 geometry.stopwatch = nil
                 onGeometry?(geometry)
             }
             setState(.tracking)
             onRead?(result, triggeredAt)
         case .windowOnly(let window, let g):
+            resetNotFound()
             bindWindow(window)
             applyGeometry(g, stopwatch: nil)
             setState(.tracking)
@@ -360,19 +503,45 @@ final class WindowTracker: AXEventSink {
                 setState(.kakaoNotRunning)
                 updatePolling()
             } else if error == .noChatWindow {
+                resetNotFound()
                 unbindWindow()
                 setState(.noChatWindow)
             } else {
                 if let window { bindWindow(window) }
-                setState(.transcriptNotFound)
+                transcriptNotFound()
             }
         }
+    }
+
+    /// One transient miss (e.g. mid-relayout) is retried; the state (which clears the sidebar) changes only
+    /// after two consecutive misses or a miss streak longer than `notFoundGrace`.
+    private func transcriptNotFound() {
+        let now = ContinuousClock.now
+        notFoundStreak += 1
+        let since = notFoundSince ?? now
+        notFoundSince = since
+        if notFoundStreak >= 2 || now - since >= Self.notFoundGrace {
+            setState(.transcriptNotFound)
+            return
+        }
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(for: WindowTracker.notFoundRetryDelay)
+            guard !Task.isCancelled, let self else { return }
+            self.retryTask = nil
+            self.requestRead()
+        }
+    }
+
+    private func resetNotFound() {
+        notFoundStreak = 0
+        notFoundSince = nil
     }
 
     // MARK: - Polling
 
     private func updatePolling() {
-        let shouldPoll = started && kakaoFrontmost && kakaoRunning && !paused && state != .noPermission
+        let shouldPoll = started && kakaoFrontmost && kakaoRunning && contentWanted && state != .noPermission
         if shouldPoll {
             guard pollTask == nil else { return }
             pollTask = Task { [weak self] in
@@ -389,9 +558,25 @@ final class WindowTracker: AXEventSink {
     }
 
     private func pollTick() {
-        guard ContinuousClock.now - lastContentEventAt >= Self.pollQuietPeriod else { return }
-        diagnostics.recordPollRead()
-        requestRead()
+        // Geometry fallback (one IPC): the panel follows within ~1 s even if a move/resize event is missed.
+        geometryChanged(stopwatch: nil)
+        guard !paused, ContinuousClock.now - lastContentEventAt >= Self.pollQuietPeriod else { return }
+        let sinceFull = lastFullReadAt.map { ContinuousClock.now - $0 }
+        if state != .tracking {
+            // Nothing to probe (no chat window / no transcript): window events drive discovery, the poll only
+            // retries at a slow cadence.
+            if sinceFull.map({ $0 >= Self.untrackedPollInterval }) ?? true {
+                diagnostics.recordPollRead()
+                requestRead()
+            }
+            return
+        }
+        if let sinceFull, sinceFull >= Self.fullReadSafetyInterval {
+            diagnostics.recordPollRead()
+            requestRead()
+            return
+        }
+        probeAndMaybeRead()
     }
 
     private func handlePermissionLoss() {
@@ -452,9 +637,10 @@ final class WindowTracker: AXEventSink {
     private func frontmostChanged(_ isKakao: Bool) {
         guard kakaoFrontmost != isKakao else { return }
         kakaoFrontmost = isKakao
+        // AppController recomputes visibility here (→ setContentWanted, which reads if dirty).
         onFrontmostChange?(isKakao)
         if isKakao {
-            if observation == nil { refreshAttachment() } else { requestRead() }
+            if observation == nil { refreshAttachment() } else if readDirty { requestRead() } else { probeAndMaybeRead() }
         }
         updatePolling()
     }

@@ -21,6 +21,10 @@ final class Diagnostics {
     private(set) var readFailureCount = 0
     private(set) var axEventCount = 0
     private(set) var pollReadCount = 0
+    /// Cheap change probes (row count + last row frame + window size) done instead of full reads.
+    private(set) var cheapPollCheckCount = 0
+    /// Read requests dropped (marked dirty) because the panel was not visible.
+    private(set) var skippedHiddenReadCount = 0
 
     func recordFollow(_ ms: Double) { append(&followSamples, ms) }
     func recordTranslation(_ ms: Double) { append(&translationSamples, ms) }
@@ -33,6 +37,8 @@ final class Diagnostics {
 
     func recordAXEvent() { axEventCount += 1 }
     func recordPollRead() { pollReadCount += 1 }
+    func recordCheapPollCheck() { cheapPollCheckCount += 1 }
+    func recordSkippedHiddenRead() { skippedHiddenReadCount += 1 }
 
     var followStats: LatencyStats { LatencyStats(followSamples) }
     var translationStats: LatencyStats { LatencyStats(translationSamples) }
@@ -44,7 +50,8 @@ final class Diagnostics {
         func f(_ s: LatencyStats) -> String { String(format: "n=%d p50=%.1f p95=%.1f", s.count, s.p50, s.p95) }
         return "stats translation[\(f(translationStats))] follow[\(f(followStats))] read[\(f(readStats))] "
             + "ingest[\(f(ingestStats))] reads=\(readCount) readFailures=\(readFailureCount) "
-            + "axEvents=\(axEventCount) pollReads=\(pollReadCount)"
+            + "axEvents=\(axEventCount) pollReads=\(pollReadCount) cheapPollChecks=\(cheapPollCheckCount) "
+            + "skippedHiddenReads=\(skippedHiddenReadCount)"
     }
 
     private func append(_ samples: inout [Double], _ value: Double) {

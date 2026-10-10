@@ -8,10 +8,10 @@ import os
 
 private let logger = Logger.talkLens("ax-observer")
 
-/// Receives AX notification names on the main actor.
+/// Receives AX notification names (and the element that posted them) on the main actor.
 @MainActor
 protocol AXEventSink: AnyObject {
-    func axEventReceived(_ name: String)
+    func axEventReceived(_ name: String, element: AXElementRef)
 }
 
 /// Token → sink registry. The AX refcon carries only an integer token, so a late callback after teardown
@@ -33,8 +33,8 @@ enum AXEventRouter {
         sinks[token] = nil
     }
 
-    static func deliver(token: Int, name: String) {
-        sinks[token]?.sink?.axEventReceived(name)
+    static func deliver(token: Int, name: String, element: AXElementRef) {
+        sinks[token]?.sink?.axEventReceived(name, element: element)
     }
 }
 
@@ -44,10 +44,11 @@ private func talkLensAXCallback(_ observer: AXObserver, _ element: AXUIElement, 
                                 _ refcon: UnsafeMutableRawPointer?) {
     let token = Int(bitPattern: refcon)
     let name = notification as String
+    let ref = AXElementRef(element: element)
     if Thread.isMainThread {
-        MainActor.assumeIsolated { AXEventRouter.deliver(token: token, name: name) }
+        MainActor.assumeIsolated { AXEventRouter.deliver(token: token, name: name, element: ref) }
     } else {
-        Task { @MainActor in AXEventRouter.deliver(token: token, name: name) }
+        Task { @MainActor in AXEventRouter.deliver(token: token, name: name, element: ref) }
     }
 }
 
@@ -68,6 +69,8 @@ final class AXObservation {
         var permissionDenied = false
         var invalidElement = false
         var otherErrors = 0
+        /// Names not attempted because the registration time budget ran out.
+        var skipped = 0
     }
 
     private init(pid: pid_t, observer: AXObserver, token: Int) {
@@ -90,12 +93,19 @@ final class AXObservation {
         return (AXObservation(pid: pid, observer: created, token: token), .success)
     }
 
+    /// Registers `names` on `element`. Each registration is a synchronous IPC to KakaoTalk on the main
+    /// thread, so the caller passes a deadline: once it has passed, the remaining names are skipped
+    /// (reported in `skipped`) instead of stalling the UI behind a busy KakaoTalk.
     @discardableResult
-    func add(_ names: [String], to element: AXUIElement) -> AddResult {
+    func add(_ names: [String], to element: AXUIElement, deadline: ContinuousClock.Instant? = nil) -> AddResult {
         var result = AddResult()
         guard isValid else { return result }
         let refcon = UnsafeMutableRawPointer(bitPattern: token)
-        for name in names {
+        for (index, name) in names.enumerated() {
+            if let deadline, ContinuousClock.now >= deadline {
+                result.skipped = names.count - index
+                break
+            }
             let err = AXObserverAddNotification(observer, element, name as CFString, refcon)
             switch err {
             case .success, .notificationAlreadyRegistered:
@@ -138,4 +148,13 @@ final class AXObservation {
     }
 
     var registrationCount: Int { registrations.count }
+
+    /// Safety net: an observation dropped without `invalidate()` must not leave its run-loop source (and
+    /// registrations) behind on the main run loop.
+    isolated deinit {
+        if isValid {
+            logger.fault("AXObservation released without invalidate()")
+            invalidate()
+        }
+    }
 }

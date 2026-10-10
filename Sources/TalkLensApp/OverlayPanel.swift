@@ -49,6 +49,9 @@ final class PanelController {
     private let effectView: NSVisualEffectView
     private(set) var lastEdge: PanelEdge?
     private(set) var isShown = false
+    /// False when the last computed frame was too small to be useful; the panel stays hidden until a
+    /// usable frame is computed again.
+    private(set) var placementValid = true
 
     init<Content: View>(rootView: Content, settings: AppSettings) {
         self.settings = settings
@@ -103,7 +106,13 @@ final class PanelController {
             lastEdge = nil
         }
         frame = frame.integral
-        if frame.width < 120 || frame.height < 120 { return }
+        if frame.width < 120 || frame.height < 120 {
+            // Hide rather than leave the panel at a stale position next to a window it no longer matches.
+            placementValid = false
+            setVisible(false, kakaoFrontmost: false)
+            return
+        }
+        placementValid = true
         if panel.frame != frame {
             panel.setFrame(frame, display: isShown, animate: false)
         }

@@ -2,6 +2,7 @@
 // Wires WindowTracker → SidebarViewModel → OverlayPanel, and reacts to settings changes.
 
 import AppKit
+import ApplicationServices
 import Foundation
 import KakaoAX
 import os
@@ -43,6 +44,9 @@ final class AppController {
     }
 
     func start() {
+        // Client-side default IPC timeout for every AX element we message (the 6 s system default would let a
+        // busy KakaoTalk stall our reads). This configures our own AX client only; nothing is sent to KakaoTalk.
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.3)
         let actions = SidebarActions(
             openOnboarding: { [weak self] in self?.showOnboarding() },
             openSettings: { [weak self] in self?.showSettings() },
@@ -60,6 +64,7 @@ final class AppController {
         model.setPaused(settings.paused)
         tracker.setPaused(settings.paused)
         tracker.start()
+        updatePanelVisibility()
 
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
@@ -132,14 +137,18 @@ final class AppController {
     private func relayout() {
         let g = tracker.geometry
         panel?.place(windowAX: g.windowAX, inputAX: g.inputAX)
+        updatePanelVisibility()
     }
 
     func updatePanelVisibility() {
         guard let panel else { return }
         let front = tracker.kakaoFrontmost
-        var visible = settings.sidebarVisible && tracker.kakaoRunning && (front || settings.pinned)
+        let wanted = settings.sidebarVisible && (front || settings.pinned)
+        var visible = wanted && tracker.kakaoRunning && panel.placementValid
         if tracker.geometry.minimized { visible = false }
         panel.setVisible(visible, kakaoFrontmost: front)
+        // Nothing is read or translated while the panel cannot be seen; the tracker reads once on return.
+        tracker.setContentWanted(wanted)
     }
 
     // MARK: - Settings

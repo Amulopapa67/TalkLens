@@ -155,12 +155,17 @@ final class SidebarViewModel {
         let seenInstant = triggeredAt ?? .now
         let stopwatch = Stopwatch()
         if snapshot.chatKey != chatKey { resetChat(snapshot.chatKey) }
-        chatTitle = title
+        if chatTitle != title { chatTitle = title }
 
         let newIDs = snapshot.messages.map(\.id)
         let diff = TranscriptDiffer.diff(old: lastIDs, new: newIDs)
         let hadRows = !lastIDs.isEmpty
-        guard diff.hasChanges || (rows.isEmpty && !newIDs.isEmpty) else { return }
+        // Order-only changes (same ids, different order) also rebuild the rows.
+        guard diff.hasChanges || newIDs != lastIDs || (rows.isEmpty && !newIDs.isEmpty) else { return }
+        let isIncremental = hadRows && !diff.isReset
+        // "Appended" = only rows below the last row that was already on screen. A row replaced in the middle
+        // (edited / deleted message) is just an updated row: no pill, no auto-scroll, no latency sample.
+        let appendedIDs = isIncremental ? Self.tailAfterLastCommon(old: lastIDs, new: newIDs) : []
 
         lastIDs = newIDs
         messages = snapshot.messages
@@ -176,34 +181,41 @@ final class SidebarViewModel {
         for row in rows { previous[row.id] = row.translation }
         let newRows = messages.compactMap { m in prepared[m.id].map { makeRow($0, translation: previous[m.id]) } }
 
-        let isIncremental = hadRows && !diff.isReset
         if isIncremental {
-            for id in diff.appended where prepared[id]?.kind.needsTranslation == true && seenAt[id] == nil {
+            for id in appendedIDs where prepared[id]?.kind.needsTranslation == true && seenAt[id] == nil {
                 seenAt[id] = seenInstant
             }
         }
-        if isIncremental && animate && !diff.appended.isEmpty {
+        if isIncremental && animate && !appendedIDs.isEmpty {
             withAnimation(.easeOut(duration: 0.25)) { setRows(newRows) }
         } else {
             setRows(newRows)
         }
         if isIncremental {
-            if !diff.appended.isEmpty {
-                lastAppendedCount = diff.appended.count
+            if !appendedIDs.isEmpty {
+                lastAppendedCount = appendedIDs.count
                 appendedTick &+= 1
             }
         } else {
             resetTick &+= 1
         }
         diagnostics.recordIngest(stopwatch.elapsedMilliseconds)
-        logger.debug("ingest rows=\(newRows.count) appended=\(diff.appended.count) prepended=\(diff.prepended.count) reset=\(diff.isReset)")
+        logger.debug("ingest rows=\(newRows.count) appended=\(appendedIDs.count) prepended=\(diff.prepended.count) reset=\(diff.isReset)")
 
-        // Priority: appended > visible bottom > visible top > prepended (each newest-first).
-        let appended = Array(diff.appended.reversed())
+        // Priority: appended > visible bottom > visible top > prepended (each newest-first). Rows replaced in
+        // the middle are still pending and get translated as part of the visible set.
+        let appended = Array(appendedIDs.reversed())
         let prepended = Array(diff.prepended.reversed())
         let edges = Set(appended).union(prepended)
         let middle = newIDs.reversed().filter { !edges.contains($0) }
         scheduleTranslation(order: appended + middle + prepended)
+    }
+
+    /// Ids of `new` below the last id that also exists in `old` (empty when there is no overlap).
+    static func tailAfterLastCommon(old: [MessageID], new: [MessageID]) -> [MessageID] {
+        let oldSet = Set(old)
+        guard let last = new.lastIndex(where: { oldSet.contains($0) }) else { return [] }
+        return Array(new[(last + 1)...])
     }
 
     // MARK: - Settings changes

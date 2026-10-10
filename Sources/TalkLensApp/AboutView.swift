@@ -44,7 +44,7 @@ struct AboutView: View {
                     statRow("diff+预处理", diagnostics.ingestStats, budget: "≤ 5")
                 }
                 .font(.system(size: 11).monospacedDigit())
-                Text("读取 \(diagnostics.readCount) 次（失败 \(diagnostics.readFailureCount)，兜底轮询 \(diagnostics.pollReadCount)），AX 事件 \(diagnostics.axEventCount) 个。单位 ms。")
+                Text("读取 \(diagnostics.readCount) 次（失败 \(diagnostics.readFailureCount)，兜底轮询 \(diagnostics.pollReadCount)，廉价检查 \(diagnostics.cheapPollCheckCount)，隐藏时跳过 \(diagnostics.skippedHiddenReadCount)），AX 事件 \(diagnostics.axEventCount) 个。单位 ms。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

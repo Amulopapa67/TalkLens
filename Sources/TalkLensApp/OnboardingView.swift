@@ -32,8 +32,8 @@ final class OnboardingModel {
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self else { return }
-                self.poll()
+                // Re-resolve the weak reference each tick so the model is never kept alive across the sleep.
+                guard self?.poll() != nil else { return }
                 try? await Task.sleep(for: .seconds(1))
             }
         }
