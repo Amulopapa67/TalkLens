@@ -52,8 +52,6 @@ final class WindowTracker: AXEventSink {
     static let contentMaxWait: Duration = .milliseconds(400)
     static let pollInterval: Duration = .seconds(1)
     static let pollQuietPeriod: Duration = .seconds(5)
-    /// The fallback poll does a full read at least this often even when the cheap probe sees no change.
-    static let fullReadSafetyInterval: Duration = .seconds(10)
     /// Poll read cadence while there is no tracked transcript (state != .tracking).
     static let untrackedPollInterval: Duration = .seconds(3)
     /// App-level AXWindowCreated (also posted for tooltips/popovers) is coalesced this long.
@@ -508,7 +506,8 @@ final class WindowTracker: AXEventSink {
         guard started else { return }
         switch outcome {
         case .read(let result, let window, let table, let anchor):
-            diagnostics.recordRead(result.elapsedMilliseconds)
+            diagnostics.recordRead(result.elapsedMilliseconds, rowsAnalyzed: result.rowsAnalyzed,
+                                   rowsTotal: result.rowsTotal)
             resetNotFound()
             bindWindow(window)
             transcriptTable = table
@@ -612,12 +611,12 @@ final class WindowTracker: AXEventSink {
             }
             return
         }
-        if let sinceFull, sinceFull >= Self.fullReadSafetyInterval {
-            diagnostics.recordPollRead()
-            requestRead()
-            return
-        }
-        probeAndMaybeRead()
+        // Reads are incremental (a cached transcript costs a handful of IPC round-trips), so the poll reads
+        // directly instead of probing first: scrolls (which post no notification), lazily loaded rows and
+        // edited messages are picked up within about a second.
+        if let sinceFull, sinceFull < Self.pollInterval { return }
+        diagnostics.recordPollRead()
+        requestRead()
     }
 
     private func handlePermissionLoss() {

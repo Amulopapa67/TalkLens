@@ -1,4 +1,4 @@
-// Derived from kmsg (https://github.com/channprj/kmsg) @54cbff7 — MIT License, Copyright (c) 2026 Park Hee Chan. Modifications: background-safe subset of MessageContextResolver.swift, generic over AXNodeLike: one budgeted BFS over the chat window finds input candidates and transcript containers; kept the input scoring and the two-phase spatial + child-bonus transcript scoring; removed kakao.activate(), focusWithVerification, focused-element lineage, the AXPathCache (memory and disk) and the pane-root/ancestor walk (AXNodeLike has no parent).
+// Derived from kmsg (https://github.com/channprj/kmsg) @54cbff7 — MIT License, Copyright (c) 2026 Park Hee Chan. Modifications: background-safe subset of MessageContextResolver.swift, generic over AXNodeLike: one budgeted BFS over the chat window finds input candidates and transcript containers; kept the input scoring and the two-phase spatial + child-bonus transcript scoring; the chosen input element is returned with its frame; removed kakao.activate(), focusWithVerification, focused-element lineage, the AXPathCache (memory and disk) and the pane-root/ancestor walk (AXNodeLike has no parent).
 // SPDX-License-Identifier: MIT
 
 import CoreGraphics
@@ -8,10 +8,13 @@ public struct TranscriptLocation<Node: AXNodeLike> {
     public let transcriptRoot: Node
     public let inputFrame: CGRect?
     public let windowFrame: CGRect?
-    public init(transcriptRoot: Node, inputFrame: CGRect?, windowFrame: CGRect?) {
+    /// The message input element whose frame is `inputFrame` (kept so incremental reads can re-validate it).
+    public let input: Node?
+    public init(transcriptRoot: Node, inputFrame: CGRect?, windowFrame: CGRect?, input: Node? = nil) {
         self.transcriptRoot = transcriptRoot
         self.inputFrame = inputFrame
         self.windowFrame = windowFrame
+        self.input = input
     }
 }
 
@@ -34,7 +37,7 @@ public enum TranscriptLocator {
               let inputFrame = input.frame,
               let root = pickTranscript(scan.containers, windowFrame: window.frame, inputFrame: inputFrame)
         else { return nil }
-        return TranscriptLocation(transcriptRoot: root, inputFrame: inputFrame, windowFrame: window.frame)
+        return TranscriptLocation(transcriptRoot: root, inputFrame: inputFrame, windowFrame: window.frame, input: input)
     }
 
     // MARK: - Scan

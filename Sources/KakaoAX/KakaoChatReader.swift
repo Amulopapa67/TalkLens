@@ -35,9 +35,20 @@ public struct ChatWindowRead: Sendable {
     /// move up and down inside the viewport when the user scrolls, so comparing a later table frame with
     /// this one gives the scroll offset since the read (window moves aside).
     public let tableFrame: CGRect?
+    /// Messages of `snapshot` whose row intersects the transcript viewport (what is on screen). The one-shot
+    /// `read(windowNode:parser:)` only emits visible rows, so there it holds every snapshot id.
+    public let visibleIDs: Set<MessageID>
+    /// AXRow elements of the transcript table (all loaded rows, on screen or not).
+    public let rowsTotal: Int
+    /// Rows whose subtree was analysed by this call (0 when everything came from the row cache).
+    public let rowsAnalyzed: Int
+    /// Cached rows whose frame was re-read by this call to validate the cache (one IPC each).
+    public let rowsVerified: Int
 
     public init(title: String, windowFrame: CGRect?, inputFrame: CGRect?, snapshot: TranscriptSnapshot,
-                elapsedMilliseconds: Double, transcriptFrame: CGRect? = nil, tableFrame: CGRect? = nil) {
+                elapsedMilliseconds: Double, transcriptFrame: CGRect? = nil, tableFrame: CGRect? = nil,
+                visibleIDs: Set<MessageID>? = nil, rowsTotal: Int? = nil, rowsAnalyzed: Int? = nil,
+                rowsVerified: Int = 0) {
         self.title = title
         self.windowFrame = windowFrame
         self.inputFrame = inputFrame
@@ -45,6 +56,10 @@ public struct ChatWindowRead: Sendable {
         self.elapsedMilliseconds = elapsedMilliseconds
         self.transcriptFrame = transcriptFrame
         self.tableFrame = tableFrame
+        self.visibleIDs = visibleIDs ?? Set(snapshot.messages.map(\.id))
+        self.rowsTotal = rowsTotal ?? snapshot.messages.count
+        self.rowsAnalyzed = rowsAnalyzed ?? self.rowsTotal
+        self.rowsVerified = rowsVerified
     }
 }
 
@@ -73,11 +88,17 @@ public enum KakaoChatReader {
     /// Focused chat window if it is a chat window, else main window, else the first chat window.
     /// Minimized windows are skipped.
     public static func currentChatWindow(app: LiveAXNode) -> LiveAXNode? {
+        currentChatWindow(app: app, isChat: { isChatWindow($0) })
+    }
+
+    /// Same, with the (expensive: a tree scan) chat-window test supplied by the caller, e.g. memoised per
+    /// window element.
+    public static func currentChatWindow(app: LiveAXNode, isChat: (LiveAXNode) -> Bool) -> LiveAXNode? {
         var tried: [LiveAXNode] = []
         func consider(_ w: LiveAXNode?) -> LiveAXNode? {
             guard let w, !tried.contains(where: { $0.isSameElement(as: w) }) else { return nil }
             tried.append(w)
-            guard !w.isMinimized, isChatWindow(w) else { return nil }
+            guard !w.isMinimized, isChat(w) else { return nil }
             return w
         }
         if let w = consider(app.focusedWindow) { return w }
