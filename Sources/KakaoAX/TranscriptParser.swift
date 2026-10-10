@@ -1,4 +1,4 @@
-// Derived from kmsg (https://github.com/channprj/kmsg) @54cbff7 — MIT License, Copyright (c) 2026 Park Hee Chan. Modifications: row analysis of TranscriptReader.swift rewritten generic over AXNodeLike and deterministic (no Date(), explicit reference year); rows collected by one budgeted BFS and filtered to the visible transcript area, with up to 20 off-screen context rows per side analysed but not emitted; avatars may be AXImage or AXButton; author taken from the static text above the body; time/date resolved forward within a same-sender group before kmsg's per-side carry-over; system rows (centered notices, date dividers) kept with isSystem; image/file-only rows kept; truncated URLs replaced in place by the AXLink title; removed AXActionRunner logging, the text-area fallback scan and the message limit/dedup logic.
+// Derived from kmsg (https://github.com/channprj/kmsg) @54cbff7 — MIT License, Copyright (c) 2026 Park Hee Chan. Modifications: row analysis of TranscriptReader.swift rewritten generic over AXNodeLike and deterministic (no Date(), explicit reference year); rows collected by one budgeted BFS and filtered to the visible transcript area, with up to 20 off-screen context rows per side analysed but not emitted; avatars may be AXImage or AXButton; author taken from the static text above the body; time/date resolved forward within a same-sender group before kmsg's per-side carry-over; system rows (centered notices, date dividers) kept with isSystem; image/file-only rows kept; truncated URLs replaced in place by the AXLink title; bubble background frame reported per message and an optional vertical margin around the visible area; removed AXActionRunner logging, the text-area fallback scan and the message limit/dedup logic.
 // SPDX-License-Identifier: MIT
 
 import CoreGraphics
@@ -14,6 +14,11 @@ public struct TranscriptParser: Sendable {
     /// KakaoTalk keeps off-screen rows in the AX tree; set false to emit every row above the input (bench worst
     /// case). Either way, up to `contextRows` rows on each side of the emitted range are analysed as context.
     public var visibleOnly: Bool
+    /// With `visibleOnly`, rows within this many points above or below the transcript viewport are emitted
+    /// too (0 = only rows on screen). The inline overlay uses about one viewport height so rows just outside
+    /// the viewport are parsed and translated before they scroll in. The input-box cut-off moves down by the
+    /// same amount (KakaoTalk keeps scrolled-out rows below the viewport, i.e. below the input box, in the tree).
+    public var visibleMargin: CGFloat
 
     /// Rows above and below the emitted range that are analysed but not emitted. They carry what a visible row
     /// cannot show by itself: the group head's author (avatar + name), the group-last time label and its AXHelp
@@ -22,10 +27,11 @@ public struct TranscriptParser: Sendable {
     public static let contextRows = 20
 
     public init(referenceYear: Int = Calendar(identifier: .gregorian).component(.year, from: Date()),
-                maxRows: Int = 400, visibleOnly: Bool = true) {
+                maxRows: Int = 400, visibleOnly: Bool = true, visibleMargin: CGFloat = 0) {
         self.referenceYear = referenceYear
         self.maxRows = maxRows
         self.visibleOnly = visibleOnly
+        self.visibleMargin = max(0, visibleMargin)
     }
 
     /// Node budget for collecting rows below the transcript root.
@@ -96,10 +102,11 @@ public struct TranscriptParser: Sendable {
             if ax != bx { return ax < bx }
             return a.order < b.order
         }
-        let visibleFrame = visibleOnly ? transcriptFrame : nil
+        let margin = visibleOnly ? visibleMargin : 0
+        let visibleFrame = visibleOnly ? transcriptFrame.map { $0.insetBy(dx: 0, dy: -margin) } : nil
         func isEmitted(_ frame: CGRect?) -> Bool {
             guard let f = frame else { return true }
-            if let inputFrame, f.maxY > inputFrame.minY + 20 { return false }
+            if let inputFrame, f.maxY > inputFrame.minY + 20 + margin { return false }
             if let tf = visibleFrame, f.intersection(tf).height < min(4, f.height) { return false }
             return true
         }
@@ -120,6 +127,8 @@ public struct TranscriptParser: Sendable {
         var body: String
         var bodyFrame: CGRect?
         var contentFrame: CGRect?
+        /// Bubble background image enclosing the body, when there is one.
+        var bubbleFrame: CGRect?
         var explicitAuthor: String?
         var timeRaw: String?
         var helpDate: String?
@@ -279,6 +288,7 @@ public struct TranscriptParser: Sendable {
         a.contentFrame = bestBody?.frame ?? messageImageFrames.first ?? fileNameItems.first?.frame
         // Bubble edges (background image) are more reliable than the inset text area for side detection.
         let bubble = bestBody?.frame.flatMap { body in bubbleFrames.first { isBubble($0, enclosing: body) } }
+        a.bubbleFrame = bubble
 
         // Author: the topmost non-metadata static text above the content.
         if let content = a.contentFrame {
@@ -406,7 +416,8 @@ public struct TranscriptParser: Sendable {
                 if let d = r.dividerDate ?? r.helpDate { lastKnownDate = d }
                 out.append(ParsedMessage(author: nil, isMine: false, isSystem: true, timeRaw: r.timeRaw,
                                          date: r.dividerDate ?? r.helpDate ?? lastKnownDate, body: r.body,
-                                         attachments: .none, frame: (r.contentFrame ?? r.rowFrame).map(AXRect.init)))
+                                         attachments: .none, frame: (r.contentFrame ?? r.rowFrame).map(AXRect.init),
+                                         bubbleFrame: (r.contentFrame ?? r.rowFrame).map(AXRect.init)))
                 continue
             }
 
@@ -453,7 +464,9 @@ public struct TranscriptParser: Sendable {
             out.append(ParsedMessage(author: author, isMine: r.side == .right, isSystem: false, timeRaw: time,
                                      date: date, body: r.body,
                                      attachments: AttachmentSummary(images: r.images, links: r.links, files: r.files),
-                                     frame: (r.bodyFrame ?? r.contentFrame ?? r.rowFrame).map(AXRect.init)))
+                                     frame: (r.bodyFrame ?? r.contentFrame ?? r.rowFrame).map(AXRect.init),
+                                     bubbleFrame: (r.bubbleFrame ?? r.bodyFrame ?? r.contentFrame ?? r.rowFrame)
+                                        .map(AXRect.init)))
         }
         return out
     }

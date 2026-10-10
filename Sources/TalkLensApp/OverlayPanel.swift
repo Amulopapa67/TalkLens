@@ -58,7 +58,9 @@ final class PanelController {
         panel = OverlayPanel()
 
         effectView = NSVisualEffectView()
-        effectView.material = .popover          // adapts to light/dark
+        // Nearly opaque material; SidebarView adds a solid window-background fill at `settings.opacity` on
+        // top, so windows behind the panel do not show through the text.
+        effectView.material = .windowBackground  // adapts to light/dark
         effectView.blendingMode = .behindWindow
         effectView.state = .active              // our app is never active; keep the material vivid
         effectView.wantsLayer = true
@@ -73,11 +75,8 @@ final class PanelController {
         // The panel size is driven by the chat window, not by SwiftUI's ideal size.
         hosting.sizingOptions = []
         effectView.addSubview(hosting)
-        panel.alphaValue = CGFloat(settings.opacity)
-    }
-
-    func applyOpacity() {
-        panel.alphaValue = CGFloat(settings.opacity)
+        // Opacity applies to the background fill only (see SidebarView); text always stays fully opaque.
+        panel.alphaValue = 1
     }
 
     /// Positions the panel for a chat window (AX coordinates); without a window, docks at the right edge of

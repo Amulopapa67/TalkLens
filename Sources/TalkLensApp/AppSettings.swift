@@ -10,7 +10,22 @@ import TalkLensCore
 final class AppSettings {
     enum Key: String, CaseIterable {
         case targetLanguage, showOriginal, fontSize, opacity, edge, panelWidth
-        case glossaryEnabled, pinned, sidebarVisible, paused, onboardingShown
+        case glossaryEnabled, pinned, sidebarVisible, paused, onboardingShown, displayMode
+    }
+
+    /// How translations are shown.
+    enum DisplayMode: String, CaseIterable, Sendable {
+        /// Transparent click-through overlay that paints each translation over its bubble.
+        case inline
+        /// Docked sidebar panel next to the chat window.
+        case sidebar
+
+        var name: String {
+            switch self {
+            case .inline: return "沉浸式（覆盖在气泡上）"
+            case .sidebar: return "侧栏"
+            }
+        }
     }
 
     struct LanguageOption: Hashable, Sendable {
@@ -50,6 +65,7 @@ final class AppSettings {
     var sidebarVisible: Bool { didSet { save(.sidebarVisible, sidebarVisible) } }
     var paused: Bool { didSet { save(.paused, paused) } }
     var onboardingShown: Bool { didSet { save(.onboardingShown, onboardingShown) } }
+    var displayMode: DisplayMode { didSet { save(.displayMode, displayMode.rawValue) } }
 
     /// `defaults == nil` keeps everything in memory (used by --self-check).
     init(defaults: UserDefaults?) {
@@ -61,7 +77,8 @@ final class AppSettings {
         targetLanguage = AppSettings.targetLanguages.contains { $0.id == lang } ? lang : "zh-Hans"
         showOriginal = value(.showOriginal, false)
         fontSize = AppSettings.clamp(value(.fontSize, 13.0), AppSettings.fontSizeRange)
-        opacity = AppSettings.clamp(value(.opacity, 0.95), AppSettings.opacityRange)
+        // Background opacity of the sidebar (text always stays fully opaque).
+        opacity = AppSettings.clamp(value(.opacity, 0.96), AppSettings.opacityRange)
         edge = PanelEdge(rawValue: value(.edge, PanelEdge.right.rawValue)) ?? .right
         panelWidth = AppSettings.clamp(value(.panelWidth, 320.0), AppSettings.panelWidthRange)
         glossaryEnabled = value(.glossaryEnabled, true)
@@ -69,6 +86,7 @@ final class AppSettings {
         sidebarVisible = value(.sidebarVisible, true)
         paused = value(.paused, false)
         onboardingShown = value(.onboardingShown, false)
+        displayMode = DisplayMode(rawValue: value(.displayMode, DisplayMode.inline.rawValue)) ?? .inline
     }
 
     var targetLocale: Locale.Language { Locale.Language(identifier: targetLanguage) }

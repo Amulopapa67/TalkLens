@@ -29,14 +29,22 @@ public struct ChatWindowRead: Sendable {
     public let inputFrame: CGRect?
     public let snapshot: TranscriptSnapshot
     public let elapsedMilliseconds: Double
+    /// Frame of the transcript container (the AXScrollArea): the on-screen viewport of the messages.
+    public let transcriptFrame: CGRect?
+    /// Frame of the transcript AXTable at read time. NSTableView's AX frame is its document bounds, which
+    /// move up and down inside the viewport when the user scrolls, so comparing a later table frame with
+    /// this one gives the scroll offset since the read (window moves aside).
+    public let tableFrame: CGRect?
 
     public init(title: String, windowFrame: CGRect?, inputFrame: CGRect?, snapshot: TranscriptSnapshot,
-                elapsedMilliseconds: Double) {
+                elapsedMilliseconds: Double, transcriptFrame: CGRect? = nil, tableFrame: CGRect? = nil) {
         self.title = title
         self.windowFrame = windowFrame
         self.inputFrame = inputFrame
         self.snapshot = snapshot
         self.elapsedMilliseconds = elapsedMilliseconds
+        self.transcriptFrame = transcriptFrame
+        self.tableFrame = tableFrame
     }
 }
 
@@ -90,7 +98,26 @@ public enum KakaoChatReader {
         let key = MessageIdentity.chatKey(forTitle: title)
         let snapshot = TranscriptSnapshot(chatKey: key, messages: MessageIdentity.assign(parsed, chatKey: key), readAt: readAt)
         return ChatWindowRead(title: title, windowFrame: loc.windowFrame, inputFrame: loc.inputFrame,
-                              snapshot: snapshot, elapsedMilliseconds: watch.elapsedMilliseconds)
+                              snapshot: snapshot, elapsedMilliseconds: watch.elapsedMilliseconds,
+                              transcriptFrame: loc.transcriptRoot.frame,
+                              tableFrame: firstTable(under: loc.transcriptRoot)?.frame)
+    }
+
+    /// Upper bound on nodes visited when looking for the AXTable under the transcript root.
+    public static let tableSearchLimit = 64
+
+    /// First AXTable at or below the transcript root (bounded BFS; on live nodes the parse has already
+    /// cached these, so no extra IPC).
+    public static func firstTable<Node: AXNodeLike>(under root: Node) -> Node? {
+        var queue = [root]
+        var index = 0
+        while index < queue.count, index < tableSearchLimit {
+            let node = queue[index]
+            index += 1
+            if node.role == AXRole.table { return node }
+            queue.append(contentsOf: node.children)
+        }
+        return nil
     }
 
     public static func read(window: LiveAXNode, parser: TranscriptParser = TranscriptParser()) throws -> ChatWindowRead {

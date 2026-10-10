@@ -69,6 +69,8 @@ final class WindowTracker: AXEventSink {
     var onRead: ((ChatWindowRead, ContinuousClock.Instant) -> Void)?
     var onGeometry: ((Geometry) -> Void)?
     var onFrontmostChange: ((Bool) -> Void)?
+    /// AXRowCountChanged on the followed transcript table (a new message; KakaoTalk may auto-scroll).
+    var onTranscriptRowsChanged: (() -> Void)?
 
     private(set) var state: State = .idle
     private(set) var kakaoFrontmost = false
@@ -78,9 +80,12 @@ final class WindowTracker: AXEventSink {
     /// only mark the content dirty, and one read happens when the panel becomes visible again.
     private(set) var contentWanted = false
     private(set) var geometry = Geometry(windowAX: nil, inputAX: nil, minimized: false, stopwatch: nil)
+    /// Scroll anchor of the last successful read (set before `onRead` is called).
+    private(set) var scrollAnchor: ScrollAnchor?
 
     private let reader: AXReader
-    private let geometryReader = WindowGeometryReader()
+    /// Cheap single-element reads (window geometry; the inline overlay's scroll anchor).
+    let geometryReader = WindowGeometryReader()
     private let diagnostics: Diagnostics
 
     private var started = false
@@ -252,6 +257,7 @@ final class WindowTracker: AXEventSink {
         stopDragTracking()
         observedWindow = nil
         transcriptTable = nil
+        scrollAnchor = nil
         inputInsets = nil
         geometryPending = false
         geometryPendingStopwatch = nil
@@ -285,6 +291,7 @@ final class WindowTracker: AXEventSink {
         if let current = observedWindow { observation?.removeAll(for: current.element) }
         observedWindow = nil
         transcriptTable = nil
+        scrollAnchor = nil
         inputInsets = nil
         geometry = Geometry(windowAX: nil, inputAX: nil, minimized: false, stopwatch: nil)
         onGeometry?(geometry)
@@ -315,6 +322,7 @@ final class WindowTracker: AXEventSink {
             // Row-count changes of other tables (e.g. another open chat window) only warrant a cheap probe.
             let ours = transcriptTable.map { $0.isSame(as: element) } ?? true
             contentEvent(needsRead: ours)
+            if ours { onTranscriptRowsChanged?() }
         default:
             contentEvent(needsRead: true)
         }
@@ -499,11 +507,12 @@ final class WindowTracker: AXEventSink {
                         triggeredAt: ContinuousClock.Instant) {
         guard started else { return }
         switch outcome {
-        case .read(let result, let window, let table):
+        case .read(let result, let window, let table, let anchor):
             diagnostics.recordRead(result.elapsedMilliseconds)
             resetNotFound()
             bindWindow(window)
             transcriptTable = table
+            scrollAnchor = anchor
             if let frame = result.windowFrame {
                 rememberInput(result.inputFrame, window: frame)
                 // A fresh geometry read that started after this read was requested is newer: keep its frame.

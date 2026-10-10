@@ -45,9 +45,18 @@ enum ProbeResult: Sendable, Equatable {
     case unknown
 }
 
+/// Element whose AX frame follows the transcript's scroll position, with its frame at read time. Normally the
+/// transcript AXTable (NSTableView reports its document bounds, which move when the user scrolls); when the
+/// table frame does not look like document bounds, the last row (rows also move with the content).
+struct ScrollAnchor: Sendable {
+    let element: AXElementRef
+    let frameAtRead: CGRect
+    let isTable: Bool
+}
+
 enum ReadOutcome: Sendable {
     /// Full transcript read of the current chat window. `table` is the transcript AXTable when found.
-    case read(ChatWindowRead, window: AXElementRef, table: AXElementRef?)
+    case read(ChatWindowRead, window: AXElementRef, table: AXElementRef?, anchor: ScrollAnchor?)
     /// Window resolved without reading the transcript (used while paused).
     case windowOnly(AXElementRef, WindowGeometry)
     case failure(KakaoReadError, window: AXElementRef?)
@@ -133,10 +142,12 @@ actor AXReader {
         let rowsAttribute: String
     }
 
-    /// Upper bound on nodes visited when looking for the AXTable under the transcript root.
-    static let tableSearchLimit = 64
-
     private let parser: TranscriptParser
+    /// Inline overlay mode: also parse rows about one viewport height above and below the viewport.
+    private var inlineMargin = false
+    private var lastViewportHeight: CGFloat?
+    /// Margin used before the first read has measured the viewport.
+    static let defaultInlineMargin: CGFloat = 500
     private var lastStartedAt: ContinuousClock.Instant?
     private var lastOutcome: ReadOutcome?
     private var probeTarget: ProbeTarget?
@@ -190,6 +201,10 @@ actor AXReader {
         return !CFEqual(window.element, current.element)
     }
 
+    func setInlineMargin(_ enabled: Bool) {
+        inlineMargin = enabled
+    }
+
     /// Drops the cached outcome (it holds chat content in memory) and the probe state.
     func clear() {
         lastOutcome = nil
@@ -207,12 +222,18 @@ actor AXReader {
         // a difference and triggers another read instead of silently missing it.
         let previousTarget = probeTarget.flatMap { $0.window.isSame(as: windowRef) ? $0 : nil }
         let preSignature = previousTarget.flatMap(Self.signature)
+        var parser = self.parser
+        if inlineMargin { parser.visibleMargin = lastViewportHeight ?? Self.defaultInlineMargin }
         do {
             let result = try KakaoChatReader.read(window: window, parser: parser)
+            if let height = result.transcriptFrame?.height, height > 0 { lastViewportHeight = height }
             // Same (already cached) node graph: locating the table again costs no extra IPC.
-            let table = TranscriptLocator.locate(inWindow: window).flatMap { Self.firstTable(under: $0.transcriptRoot) }
+            let tableNode = TranscriptLocator.locate(inWindow: window)
+                .flatMap { KakaoChatReader.firstTable(under: $0.transcriptRoot) }
+            let table = tableNode.map { AXElementRef(element: $0.element) }
             updateProbeTarget(window: windowRef, table: table, previous: previousTarget, preSignature: preSignature)
-            return .read(result, window: windowRef, table: table)
+            let anchor = tableNode.flatMap { Self.scrollAnchor(table: $0, read: result) }
+            return .read(result, window: windowRef, table: table, anchor: anchor)
         } catch let error as KakaoReadError {
             return fail(error, window: windowRef)
         } catch {
@@ -259,17 +280,19 @@ actor AXReader {
         return ContentSignature(rowCount: count, lastRow: lastRow, windowSize: windowFrame.size)
     }
 
-    /// First AXTable at or below the transcript root (bounded BFS over already-cached nodes).
-    private static func firstTable(under root: LiveAXNode) -> AXElementRef? {
-        var queue = [root]
-        var index = 0
-        while index < queue.count, index < tableSearchLimit {
-            let node = queue[index]
-            index += 1
-            if node.role == AXRole.table { return AXElementRef(element: node.element) }
-            queue.append(contentsOf: node.children)
+    /// The table when its frame tracks scrolling, else the last row; frames come from the read's cached
+    /// node graph, so they are consistent with the message frames of the same read (no extra IPC).
+    private static func scrollAnchor(table: LiveAXNode, read: ChatWindowRead) -> ScrollAnchor? {
+        if let tableFrame = read.tableFrame, let viewport = read.transcriptFrame,
+           InlineLayout.usesTableAnchor(tableFrame: tableFrame, viewport: viewport) {
+            return ScrollAnchor(element: AXElementRef(element: table.element), frameAtRead: tableFrame, isTable: true)
         }
-        return nil
+        guard let row = table.children.last(where: { $0.role == AXRole.row && $0.frame != nil }),
+              let frame = row.frame else {
+            return read.tableFrame.map { ScrollAnchor(element: AXElementRef(element: table.element), frameAtRead: $0,
+                                                      isTable: true) }
+        }
+        return ScrollAnchor(element: AXElementRef(element: row.element), frameAtRead: frame, isTable: false)
     }
 }
 
@@ -282,5 +305,10 @@ actor WindowGeometryReader {
     /// Fresh (uncached) position/size/minimized read: one IPC round-trip. Nil when the element is gone.
     func geometry(of window: AXElementRef) -> WindowGeometry? {
         AXQuickRead.windowGeometry(window.element)
+    }
+
+    /// Fresh position/size of any element (the inline overlay's scroll anchor): one IPC round-trip.
+    func frame(of element: AXElementRef) -> CGRect? {
+        AXQuickRead.frame(element.element)
     }
 }

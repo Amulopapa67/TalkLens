@@ -104,6 +104,13 @@ final class SidebarViewModel {
         return c
     }
 
+    /// Row for a message id (reads `rows`, so SwiftUI / observation tracking see translation updates).
+    func row(_ id: MessageID) -> SidebarRow? {
+        let all = rows
+        guard let idx = rowIndex[id], idx < all.count, all[idx].id == id else { return nil }
+        return all[idx]
+    }
+
     func isOriginalVisible(_ id: MessageID) -> Bool {
         settings.showOriginal != toggledOriginals.contains(id)
     }
@@ -146,11 +153,14 @@ final class SidebarViewModel {
     /// - triggeredAt: when the AX content event (or poll) that led to this read happened; the
     ///   "new message seen → translation displayed" latency is measured from there.
     func ingest(_ read: ChatWindowReadLike, triggeredAt: ContinuousClock.Instant? = nil) {
-        ingest(snapshot: read.snapshot, title: read.title, animate: true, triggeredAt: triggeredAt)
+        ingest(snapshot: read.snapshot, title: read.title, animate: true, triggeredAt: triggeredAt,
+               viewport: read.transcriptFrame)
     }
 
+    /// - viewport: transcript viewport (AX). When given, rows on screen are translated before rows parsed
+    ///   only as margin above/below it (inline mode).
     func ingest(snapshot: TranscriptSnapshot, title: String?, animate: Bool,
-                triggeredAt: ContinuousClock.Instant? = nil) {
+                triggeredAt: ContinuousClock.Instant? = nil, viewport: CGRect? = nil) {
         guard !paused else { return }
         let seenInstant = triggeredAt ?? .now
         let stopwatch = Stopwatch()
@@ -207,7 +217,11 @@ final class SidebarViewModel {
         let appended = Array(appendedIDs.reversed())
         let prepended = Array(diff.prepended.reversed())
         let edges = Set(appended).union(prepended)
-        let middle = newIDs.reversed().filter { !edges.contains($0) }
+        var middle = newIDs.reversed().filter { !edges.contains($0) }
+        if let viewport {
+            let onScreen = Set(messages.filter { m in m.frame.map { $0.cgRect.intersects(viewport) } ?? true }.map(\.id))
+            middle = middle.filter { onScreen.contains($0) } + middle.filter { !onScreen.contains($0) }
+        }
         scheduleTranslation(order: appended + middle + prepended)
     }
 
@@ -402,4 +416,6 @@ final class SidebarViewModel {
 protocol ChatWindowReadLike {
     var title: String { get }
     var snapshot: TranscriptSnapshot { get }
+    /// Transcript viewport (AX coordinates), when known.
+    var transcriptFrame: CGRect? { get }
 }

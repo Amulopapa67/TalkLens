@@ -24,6 +24,18 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("显示方式") {
+                Picker("显示方式", selection: $settings.displayMode) {
+                    ForEach(AppSettings.DisplayMode.allCases, id: \.self) { mode in
+                        Text(mode.name).tag(mode)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                Text("沉浸式：译文直接盖在 KakaoTalk 的气泡上，滚动时跟随；按住 ⌥ 显示原文，鼠标悬停在气泡上可看原文和词表注释。窗口不拦截点击。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("侧栏") {
                 Picker("贴靠位置", selection: $settings.edge) {
                     ForEach(PanelEdge.allCases, id: \.self) { edge in
@@ -42,7 +54,7 @@ struct SettingsView: View {
                         Text("\(Int(settings.fontSize))").monospacedDigit().frame(width: 52, alignment: .trailing)
                     }
                 }
-                LabeledContent("不透明度") {
+                LabeledContent("背景不透明度") {
                     HStack {
                         Slider(value: $settings.opacity, in: AppSettings.opacityRange, step: 0.05)
                         Text("\(Int((settings.opacity * 100).rounded()))%").monospacedDigit()
@@ -50,7 +62,7 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("常驻显示（KakaoTalk 不在前台时也显示）", isOn: $settings.pinned)
-                Toggle("显示侧栏", isOn: $settings.sidebarVisible)
+                Toggle("显示译文（侧栏或沉浸式覆盖）", isOn: $settings.sidebarVisible)
             }
 
             Section("词表") {

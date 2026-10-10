@@ -63,9 +63,13 @@ public struct ParsedMessage: Hashable, Sendable, Codable {
     public var attachments: AttachmentSummary
     /// AX global coordinates (top-left origin), used for optional inline mode.
     public var frame: AXRect?
+    /// Frame of the bubble background enclosing the body (AX global coordinates); falls back to `frame` when
+    /// no bubble image was found. Geometry only: never part of the message identity or of replay output.
+    public var bubbleFrame: AXRect?
 
     public init(author: String?, isMine: Bool, isSystem: Bool, timeRaw: String?, date: String?,
-                body: String, attachments: AttachmentSummary = .none, frame: AXRect? = nil) {
+                body: String, attachments: AttachmentSummary = .none, frame: AXRect? = nil,
+                bubbleFrame: AXRect? = nil) {
         self.author = author
         self.isMine = isMine
         self.isSystem = isSystem
@@ -74,6 +78,7 @@ public struct ParsedMessage: Hashable, Sendable, Codable {
         self.body = body
         self.attachments = attachments
         self.frame = frame
+        self.bubbleFrame = bubbleFrame
     }
 }
 
@@ -88,6 +93,8 @@ public struct ChatMessage: Hashable, Sendable, Identifiable {
     public let body: String
     public let attachments: AttachmentSummary
     public let frame: AXRect?
+    /// See `ParsedMessage.bubbleFrame`.
+    public let bubbleFrame: AXRect?
 
     public init(id: MessageID, parsed p: ParsedMessage) {
         self.id = id
@@ -99,6 +106,7 @@ public struct ChatMessage: Hashable, Sendable, Identifiable {
         self.body = p.body
         self.attachments = p.attachments
         self.frame = p.frame
+        self.bubbleFrame = p.bubbleFrame
     }
 }
 

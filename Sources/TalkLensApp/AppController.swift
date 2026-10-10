@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
-// Wires WindowTracker → SidebarViewModel → OverlayPanel, and reacts to settings changes.
+// Wires WindowTracker → SidebarViewModel → OverlayPanel (sidebar mode) / InlineOverlayController (inline
+// mode), and reacts to settings changes.
 
 import AppKit
 import ApplicationServices
@@ -26,6 +27,7 @@ final class AppController {
     let loginItem: LoginItemController
     let presenter = WindowPresenter()
     private(set) var panel: PanelController?
+    private(set) var inline: InlineOverlayController?
     private var onboardingModel: OnboardingModel?
     private var screenObserver: NSObjectProtocol?
     private var statsTask: Task<Void, Never>?
@@ -54,12 +56,19 @@ final class AppController {
         )
         panel = PanelController(rootView: SidebarView(model: model, settings: settings, actions: actions),
                                 settings: settings)
+        inline = InlineOverlayController(model: model, tracker: tracker, diagnostics: diagnostics)
 
         settings.onChange = { [weak self] key in self?.settingChanged(key) }
         tracker.onStateChange = { [weak self] state in self?.trackerStateChanged(state) }
-        tracker.onRead = { [weak self] read, triggeredAt in self?.model.ingest(read, triggeredAt: triggeredAt) }
+        tracker.onRead = { [weak self] read, triggeredAt in
+            guard let self else { return }
+            self.model.ingest(read, triggeredAt: triggeredAt)
+            self.inline?.ingest(read, anchor: self.tracker.scrollAnchor)
+        }
         tracker.onGeometry = { [weak self] geometry in self?.geometryChanged(geometry) }
         tracker.onFrontmostChange = { [weak self] _ in self?.updatePanelVisibility() }
+        tracker.onTranscriptRowsChanged = { [weak self] in self?.inline?.transcriptRowsChanged() }
+        applyDisplayModeToReader()
 
         model.setPaused(settings.paused)
         tracker.setPaused(settings.paused)
@@ -97,6 +106,7 @@ final class AppController {
         statsTask?.cancel()
         statsTask = nil
         tracker.stop()
+        inline?.stop()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
         onboardingModel?.stop()
@@ -128,6 +138,7 @@ final class AppController {
     private func geometryChanged(_ geometry: WindowTracker.Geometry) {
         guard let panel else { return }
         panel.place(windowAX: geometry.windowAX, inputAX: geometry.inputAX)
+        inline?.geometryChanged(geometry)
         updatePanelVisibility()
         if let stopwatch = geometry.stopwatch {
             diagnostics.recordFollow(stopwatch.elapsedMilliseconds)
@@ -137,18 +148,32 @@ final class AppController {
     private func relayout() {
         let g = tracker.geometry
         panel?.place(windowAX: g.windowAX, inputAX: g.inputAX)
+        inline?.screensChanged()
         updatePanelVisibility()
     }
+
+    var isInlineMode: Bool { settings.displayMode == .inline }
 
     func updatePanelVisibility() {
         guard let panel else { return }
         let front = tracker.kakaoFrontmost
-        let wanted = settings.sidebarVisible && (front || settings.pinned)
-        var visible = wanted && tracker.kakaoRunning && panel.placementValid
+        let inlineMode = isInlineMode
+        // `sidebarVisible` is the menu's "show translations" switch in both modes. The inline overlay only
+        // makes sense over a frontmost KakaoTalk, so `pinned` applies to the sidebar only.
+        let wanted = settings.sidebarVisible && (front || (!inlineMode && settings.pinned))
+        var visible = !inlineMode && wanted && tracker.kakaoRunning && panel.placementValid
         if tracker.geometry.minimized { visible = false }
         panel.setVisible(visible, kakaoFrontmost: front)
-        // Nothing is read or translated while the panel cannot be seen; the tracker reads once on return.
+        let overlayActive = inlineMode && wanted && front && tracker.kakaoRunning && tracker.state == .tracking
+            && !tracker.geometry.minimized && tracker.geometry.windowAX != nil && !settings.paused
+        inline?.setActive(overlayActive)
+        // Nothing is read or translated while nothing can be seen; the tracker reads once on return.
         tracker.setContentWanted(wanted)
+    }
+
+    private func applyDisplayModeToReader() {
+        let inlineMode = isInlineMode
+        Task { [reader] in await reader.setInlineMargin(inlineMode) }
     }
 
     // MARK: - Settings
@@ -162,12 +187,23 @@ final class AppController {
         case .edge, .panelWidth:
             relayout()
         case .opacity:
-            panel?.applyOpacity()
+            // The sidebar's background fill observes the setting directly.
+            break
         case .pinned, .sidebarVisible:
             updatePanelVisibility()
+        case .displayMode:
+            logger.info("display mode=\(self.settings.displayMode.rawValue, privacy: .public)")
+            applyDisplayModeToReader()
+            updatePanelVisibility()
+            // Re-read with the new row margin (inline mode also parses rows just outside the viewport).
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(50))
+                self?.tracker.requestRead()
+            }
         case .paused:
             model.setPaused(settings.paused)
             tracker.setPaused(settings.paused)
+            updatePanelVisibility()
         case .fontSize, .showOriginal, .onboardingShown:
             break
         }

@@ -42,6 +42,8 @@ struct SidebarView: View {
             }
         }
         .frame(minWidth: 200, minHeight: 160)
+        // Solid backdrop over the panel's material: `opacity` affects only this fill, never the text.
+        .background(Color(nsColor: .windowBackgroundColor).opacity(settings.opacity))
     }
 
     private var engineBanner: AnyView? {
