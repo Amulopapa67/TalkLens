@@ -30,6 +30,12 @@ rm -rf "$OUT"                               # only our own build output
 mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources"
 cp "$BIN" "$OUT/Contents/MacOS/$APP_NAME"
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$OUT/Contents/Resources/AppIcon.icns"
+# Starter glossary, loaded via Bundle.main (falls back to an empty glossary when missing).
+if [ -f fixtures/glossary.ko-zh.json ]; then
+  cp fixtures/glossary.ko-zh.json "$OUT/Contents/Resources/glossary.ko-zh.json"
+else
+  echo "warning: fixtures/glossary.ko-zh.json not found; app will start with an empty glossary" >&2
+fi
 
 cat > "$OUT/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
