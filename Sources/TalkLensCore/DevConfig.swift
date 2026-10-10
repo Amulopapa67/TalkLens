@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 // .lens-dev.json loader: the self-chat title allowlist that gates showing/recording raw text in tlctl.
-// STUB — core-dev: implement and test.
 
 import Foundation
 
