@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 // Incremental diff between two snapshots' id lists (docs/architecture.md §4.3).
-// STUB — core-dev: implement the suffix/prefix overlap algorithm and test it.
 
 import Foundation
 
@@ -25,8 +24,44 @@ public struct TranscriptDiff: Sendable, Equatable {
 }
 
 public enum TranscriptDiffer {
+    /// Diff of two top-to-bottom id lists. Ids are unique within a snapshot (MessageIdentity adds "#k").
+    ///
+    /// Because ids are unique, the "suffix of old = prefix of new" (scroll down / new messages),
+    /// "prefix of old = suffix of new" (scroll up), "new inside old" and "old inside new" cases all reduce to
+    /// one O(n) pass with a hash set:
+    /// - `unchanged`: ids present in both, in `new` order;
+    /// - `prepended`: new-only ids above the first common id;
+    /// - `appended`: new-only ids below the first common id (for a clean scroll these are exactly the rows
+    ///   after the overlap; an edited/deleted row in the middle also lands here instead of forcing a reset);
+    /// - `removed`: old-only ids, in `old` order.
+    /// No common id at all → `isReset` (appended = all new, removed = all old). Both empty → no changes.
     public static func diff(old: [MessageID], new: [MessageID]) -> TranscriptDiff {
         if old == new { return TranscriptDiff(unchanged: new) }
-        return TranscriptDiff(appended: new, removed: old, isReset: true)
+        if old.isEmpty { return TranscriptDiff(appended: new, isReset: true) }
+        if new.isEmpty { return TranscriptDiff(removed: old, isReset: true) }
+
+        let oldSet = Set(old)
+        var prepended: [MessageID] = []
+        var appended: [MessageID] = []
+        var unchanged: [MessageID] = []
+        unchanged.reserveCapacity(min(old.count, new.count))
+        var newSet = Set<MessageID>(minimumCapacity: new.count)
+        var seenCommon = false
+        for id in new {
+            newSet.insert(id)
+            if oldSet.contains(id) {
+                seenCommon = true
+                unchanged.append(id)
+            } else if seenCommon {
+                appended.append(id)
+            } else {
+                prepended.append(id)
+            }
+        }
+        guard seenCommon else {
+            return TranscriptDiff(appended: new, removed: old, isReset: true)
+        }
+        let removed = old.filter { !newSet.contains($0) }
+        return TranscriptDiff(appended: appended, prepended: prepended, removed: removed, unchanged: unchanged)
     }
 }
