@@ -40,6 +40,12 @@
 | 移动 / 缩放 / 最小化的通知 | **[观察]** 拖动窗口：AXWindow 上的 `AXMoved`，约每 100 ms 一次；缩放：`AXResized`，约 60 Hz（2 s 里 111 次）；最小化：`AXFocusedWindowChanged` + `AXMainWindowChanged` + `AXWindowMiniaturized`。侧栏跟随以事件驱动为主 | `tlctl watch --seconds 45`：AXMoved=11、AXResized=111、AXWindowMiniaturized=1 |
 | 单次读取耗时 | **[观察]** 8 行：locate 0.06 ms + parse 1.1–1.3 ms（`tlctl probe --summary`）；合成 205 行：parse p95 ≈ 4 ms（`tlctl bench`） | probe / bench |
 
+## 读取成本与"预读"（2026-10-10 实测，只输出数字的脚本）
+
+- **[观察]** 群聊窗口的 AXTable 含全部已加载的行：56 行里只有 4 行在屏幕上，屏幕外 52 行里有 41 行能读到 AXTextArea 文本。所以已加载的历史可以**预读、预翻译**。
+- **[观察]** AXTable 的 frame 是整个文档的边界（y = −5624，h = 7480），滚动时它的原点移动，所有行和气泡的 frame 一起平移同样的量。
+- **[观察]** KakaoTalk 的 AX 跨进程调用很慢：批量读 56 行约 150 ms；逐个属性读要 3.6 s。所以每行只分析一次并缓存，之后滚动只读表格位置（1 次调用），新消息只读新增的行。
+
 ## 与 kmsg 记录的差异（汇总见 D-015）
 
 1. 气泡背景是 AXImage，kmsg 的"≥48×48 的图片 = 图片附件"会误判，改为"包住正文的 AXImage 不算图片"。
