@@ -44,11 +44,14 @@ public struct ChatWindowRead: Sendable {
     public let rowsAnalyzed: Int
     /// Cached rows whose frame was re-read by this call to validate the cache (one IPC each).
     public let rowsVerified: Int
+    /// Rows in the prefetch band still waiting for analysis because of the per-read budget; callers should
+    /// schedule a follow-up read (after a short pause) while this is > 0.
+    public let rowsPending: Int
 
     public init(title: String, windowFrame: CGRect?, inputFrame: CGRect?, snapshot: TranscriptSnapshot,
                 elapsedMilliseconds: Double, transcriptFrame: CGRect? = nil, tableFrame: CGRect? = nil,
                 visibleIDs: Set<MessageID>? = nil, rowsTotal: Int? = nil, rowsAnalyzed: Int? = nil,
-                rowsVerified: Int = 0) {
+                rowsVerified: Int = 0, rowsPending: Int = 0) {
         self.title = title
         self.windowFrame = windowFrame
         self.inputFrame = inputFrame
@@ -60,6 +63,7 @@ public struct ChatWindowRead: Sendable {
         self.rowsTotal = rowsTotal ?? snapshot.messages.count
         self.rowsAnalyzed = rowsAnalyzed ?? self.rowsTotal
         self.rowsVerified = rowsVerified
+        self.rowsPending = rowsPending
     }
 }
 
@@ -73,7 +77,9 @@ public enum KakaoChatReader {
         if window.children.contains(where: { $0.identifier.map(mainWindowNavigationIdentifiers.contains) ?? false }) {
             return true
         }
-        return AXTree.findFirst(in: window, maxNodes: 400) { node in
+        // Verified on 26.8.0: the navigation buttons are direct children. Look one level deeper at most —
+        // every node visited is a slow cross-process call (D-020).
+        return AXTree.findFirst(in: window, maxNodes: 40) { node in
             node.identifier.map(mainWindowNavigationIdentifiers.contains) ?? false
         } != nil
     }

@@ -64,6 +64,13 @@ public final class TranscriptRowCache<Node: IncrementalAXNode>: @unchecked Senda
     /// Rows on screen are re-analysed when their analysis is older than this (edited / deleted messages keep
     /// their element and frame, so nothing else would notice).
     public var visibleRefreshInterval: Duration
+    /// At most this many row subtrees are analysed per read (on-screen rows first). Every analysis costs several
+    /// slow cross-process calls, and touching many off-screen rows at once made KakaoTalk's AX progressively
+    /// slower in testing (D-020); the rest is picked up by follow-up reads (`ChatWindowRead.rowsPending`).
+    public var maxAnalysesPerRead: Int
+    /// Rows are prefetched (analysed before they scroll into view) within this many viewport heights above and
+    /// below the viewport. Rows farther away are only remembered by position and never touched.
+    public var prefetchViewports: CGFloat
 
     var windowIdentity: Node.Identity?
     var root: Node?
@@ -75,15 +82,21 @@ public final class TranscriptRowCache<Node: IncrementalAXNode>: @unchecked Senda
     var entries: [Node.Identity: Entry] = [:]
     /// Table children that are not rows (AXColumn).
     var nonRows: Set<Node.Identity> = []
+    /// Rows seen but not analysed yet (outside the prefetch band or over budget): frame + table origin when
+    /// seen, so their position can be tracked without touching them again.
+    var deferred: [Node.Identity: (rowFrame: CGRect?, tableOrigin: CGPoint)] = [:]
     /// Row identities of the last read, in table order.
     var order: [Node.Identity] = []
 
     /// The transcript AXTable as (freshly) read by the last successful incremental read.
     public private(set) var lastTable: Node?
 
-    public init(lazyRetryInterval: Duration = .seconds(2), visibleRefreshInterval: Duration = .seconds(15)) {
+    public init(lazyRetryInterval: Duration = .seconds(2), visibleRefreshInterval: Duration = .seconds(15),
+                maxAnalysesPerRead: Int = 16, prefetchViewports: CGFloat = 1) {
         self.lazyRetryInterval = lazyRetryInterval
         self.visibleRefreshInterval = visibleRefreshInterval
+        self.maxAnalysesPerRead = max(1, maxAnalysesPerRead)
+        self.prefetchViewports = max(0, prefetchViewports)
     }
 
     /// Number of rows with a cached analysis (empty rows included).
@@ -108,6 +121,7 @@ public final class TranscriptRowCache<Node: IncrementalAXNode>: @unchecked Senda
         analysisWidth = nil
         entries = [:]
         nonRows = []
+        deferred = [:]
         order = []
     }
 
@@ -176,7 +190,7 @@ extension KakaoChatReader {
         for child in tableNow.children {
             let id = child.elementIdentity
             if cache.nonRows.contains(id) { continue }
-            if cache.entries[id] != nil || child.role == AXRole.row {
+            if cache.entries[id] != nil || cache.deferred[id] != nil || child.role == AXRole.row {
                 rows.append((id, child))
             } else {
                 cache.nonRows.insert(id)
@@ -197,13 +211,34 @@ extension KakaoChatReader {
             guard viewport != nil else { return true }
             return TranscriptParser.isOnScreen(f, viewport: viewport, inputFrame: inputFrame)
         }
-        let nearBand = viewport.map { $0.insetBy(dx: 0, dy: -$0.height) }
+        let nearBand = viewport.map { $0.insetBy(dx: 0, dy: -$0.height * max(cache.prefetchViewports, 1)) }
+        let prefetchBand = viewport.map { $0.insetBy(dx: 0, dy: -$0.height * cache.prefetchViewports) }
+        /// Current frame of a row that has no cache entry: tracked from when it was first seen (no IPC), or read
+        /// once now (its attributes were fetched by the role check above anyway).
+        func uncachedFrame(_ i: Int) -> CGRect? {
+            let id = rows[i].id
+            if let d = cache.deferred[id] {
+                return d.rowFrame?.offsetBy(dx: tableOrigin.x - d.tableOrigin.x, dy: tableOrigin.y - d.tableOrigin.y)
+            }
+            let f = rows[i].node.frame
+            cache.deferred[id] = (f, tableOrigin)
+            return f
+        }
+        func inPrefetchBand(_ f: CGRect?) -> Bool {
+            guard let band = prefetchBand else { return true }
+            guard let f else { return false }
+            return band.intersects(f)
+        }
 
         // 3. Decide what to analyse and which cached frames to validate.
         var analyse = Set<Int>()
         var verify: [Int] = []
         for (i, row) in rows.enumerated() {
-            guard let e = cache.entries[row.id] else { analyse.insert(i); continue }
+            guard let e = cache.entries[row.id] else {
+                // New rows are analysed only near the viewport; far rows wait until they scroll closer.
+                if inPrefetchBand(uncachedFrame(i)) { analyse.insert(i) }
+                continue
+            }
             if widthChanged { analyse.insert(i); continue }
             let f = expectedFrame(e)
             let age = now - e.analyzedAt
@@ -227,7 +262,8 @@ extension KakaoChatReader {
         var refreshAll = false
         func refresh(_ i: Int) -> Bool {
             // true = frame matches (after correcting a pure translation); false = size changed (re-analyse).
-            guard var e = cache.entries[rows[i].id] else { return false }
+            // Rows without an entry are deferred (tracked by position only): nothing to validate.
+            guard var e = cache.entries[rows[i].id] else { return true }
             verified += 1
             guard let actual = rows[i].node.frame, let expected = expectedFrame(e) else { return true }
             if abs(actual.width - expected.width) > 0.5 || abs(actual.height - expected.height) > 0.5 { return false }
@@ -252,9 +288,25 @@ extension KakaoChatReader {
         }
         if refreshAll { refreshFrames(from: 0) } else if let s = structuralFrom { refreshFrames(from: s) }
 
-        // 4. Analyse (visible rows first is irrelevant here: the call is synchronous).
+        // 4. Analyse within the budget: on-screen rows first, then the rest of the band nearest the viewport,
+        //    newest first on ties. Rows over budget stay deferred for a follow-up read.
+        func priorityFrame(_ i: Int) -> CGRect? {
+            if let e = cache.entries[rows[i].id] { return expectedFrame(e) }
+            return uncachedFrame(i)
+        }
+        func distance(_ f: CGRect?) -> CGFloat {
+            guard let v = viewport, let f else { return .greatestFiniteMagnitude }
+            if f.intersects(v) { return 0 }
+            return f.maxY < v.minY ? v.minY - f.maxY : f.minY - v.maxY
+        }
+        let ranked = analyse.sorted { a, b in
+            let da = distance(priorityFrame(a)), db = distance(priorityFrame(b))
+            return da != db ? da < db : a > b
+        }
+        let budgeted = Array(ranked.prefix(cache.maxAnalysesPerRead))
+        let pending = ranked.count - budgeted.count
         var heightChangedAt: Int?
-        for i in analyse.sorted() {
+        for i in budgeted.sorted() {
             let node = rows[i].node
             let rowFrame = node.frame
             let a = parser.analyzeRow(node, rowFrame: rowFrame, transcriptFrame: viewport)
@@ -263,6 +315,7 @@ extension KakaoChatReader {
                 heightChangedAt = i
             }
             cache.entries[rows[i].id] = .init(analysis: a, rowFrame: rowFrame, tableOrigin: tableOrigin, analyzedAt: now)
+            cache.deferred[rows[i].id] = nil
         }
         // A row that grew or shrank pushes the rows below it within the table.
         if let h = heightChangedAt { refreshFrames(from: h + 1) }
@@ -271,6 +324,9 @@ extension KakaoChatReader {
         let present = Set(rows.map(\.id))
         if present.count != cache.entries.count {
             cache.entries = cache.entries.filter { present.contains($0.key) }
+        }
+        if !cache.deferred.isEmpty {
+            cache.deferred = cache.deferred.filter { present.contains($0.key) }
         }
         cache.order = rows.map(\.id)
         cache.setLastTable(tableNow)
@@ -302,6 +358,6 @@ extension KakaoChatReader {
         return ChatWindowRead(title: title, windowFrame: windowFrame, inputFrame: inputFrame, snapshot: snapshot,
                               elapsedMilliseconds: watch.elapsedMilliseconds, transcriptFrame: viewport,
                               tableFrame: tableFrame, visibleIDs: visible, rowsTotal: rows.count,
-                              rowsAnalyzed: analyse.count, rowsVerified: verified)
+                              rowsAnalyzed: budgeted.count, rowsVerified: verified, rowsPending: pending)
     }
 }

@@ -163,9 +163,27 @@ public enum TranscriptLocator {
     }
 
     /// Phase 2: rows and static texts inside the candidate.
+    /// Cheap structural bonus: looks at most two levels down and at most a few children, because every node
+    /// visited is a cross-process AX call and KakaoTalk answers slowly (~5–10 ms each). A deep BFS here used to
+    /// cost seconds on chats with many loaded rows (docs/ax-map.md, D-020).
     static func childBonus<Node: AXNodeLike>(_ node: Node) -> Double {
-        let found = AXTree.findAll(in: node, roles: [AXRole.row, AXRole.staticText],
-                                   roleLimits: [AXRole.row: 20, AXRole.staticText: 20], maxNodes: 240)
-        return Double((found[AXRole.row]?.count ?? 0) * 150) + Double((found[AXRole.staticText]?.count ?? 0) * 25)
+        func rowBonus(_ list: Node) -> Double {
+            let rows = list.children.prefix(childBonusSampleSize).filter { $0.role == AXRole.row }.count
+            return Double(rows * 150)
+        }
+        let role = node.role ?? ""
+        if role == AXRole.table || role == AXRole.outline || role == AXRole.list {
+            return 1_000 + rowBonus(node)
+        }
+        for child in node.children.prefix(childBonusSampleSize) {
+            let r = child.role ?? ""
+            if r == AXRole.table || r == AXRole.outline || r == AXRole.list {
+                return 1_000 + rowBonus(child)
+            }
+        }
+        return 0
     }
+
+    /// Children inspected per level by `childBonus`.
+    static let childBonusSampleSize = 6
 }

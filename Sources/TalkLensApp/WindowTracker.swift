@@ -112,6 +112,8 @@ final class WindowTracker: AXEventSink {
     private var readDirty = false
     private var probeInFlight = false
     private var dragTrackingTask: Task<Void, Never>?
+    private var prefetchTask: Task<Void, Never>?
+    static let prefetchPause: Duration = .milliseconds(150)
     private var dragLastChange: ContinuousClock.Instant = .now
     static let dragSampleInterval: Duration = .milliseconds(16)
     static let dragQuietPeriod: Duration = .milliseconds(300)
@@ -152,7 +154,7 @@ final class WindowTracker: AXEventSink {
         for token in workspaceTokens { center.removeObserver(token) }
         workspaceTokens.removeAll()
         for task in [debounceTask, pollTask, permissionTask, delayedRefreshTask, windowCheckTask, retryTask,
-                     dragTrackingTask] {
+                     dragTrackingTask, prefetchTask] {
             task?.cancel()
         }
         debounceTask = nil
@@ -253,6 +255,8 @@ final class WindowTracker: AXEventSink {
         observation?.invalidate()
         observation = nil
         stopDragTracking()
+        prefetchTask?.cancel()
+        prefetchTask = nil
         observedWindow = nil
         transcriptTable = nil
         scrollAnchor = nil
@@ -501,6 +505,18 @@ final class WindowTracker: AXEventSink {
         }
     }
 
+    /// Rows near the viewport still waiting for analysis (per-read budget, D-020): read again after a short
+    /// pause so KakaoTalk is never kept busy by one long burst of AX calls.
+    private func schedulePrefetchFollowUp(pending: Int) {
+        guard pending > 0, prefetchTask == nil else { return }
+        prefetchTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.prefetchPause, tolerance: .milliseconds(30))
+            guard let self, !Task.isCancelled else { return }
+            self.prefetchTask = nil
+            self.requestRead()
+        }
+    }
+
     private func handle(_ outcome: ReadOutcome, requestedAt: ContinuousClock.Instant,
                         triggeredAt: ContinuousClock.Instant) {
         guard started else { return }
@@ -527,6 +543,7 @@ final class WindowTracker: AXEventSink {
             }
             setState(.tracking)
             onRead?(result, triggeredAt)
+            schedulePrefetchFollowUp(pending: result.rowsPending)
         case .windowOnly(let window, let g):
             resetNotFound()
             bindWindow(window)

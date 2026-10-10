@@ -16,6 +16,13 @@ struct IncrementalReadTests {
 
     // MARK: - Helpers
 
+    /// Cache with no prefetch band limit and no per-read budget: the tests below exercise the cache mechanics
+    /// (identity, shifting, validation) on whole chats. Band/budget behaviour is tested in
+    /// IncrementalReadBudgetTests.
+    static func unlimitedCache<N: IncrementalAXNode>(_: N.Type) -> TranscriptRowCache<N> {
+        TranscriptRowCache<N>(maxAnalysesPerRead: Int.max, prefetchViewports: 1_000_000)
+    }
+
     static func smallChat(extra: Bool = false, spacer: Bool = false) -> SyntheticChat {
         var c = SyntheticChat(title: "합성 증분방", options: .init(windowHeight: 760, spacerRow: spacer))
         c.other("합성A", .text("내일 랩미팅은 오후 2시에서 4시로 변경되었습니다."))
@@ -55,7 +62,7 @@ struct IncrementalReadTests {
             let file = try Fixture.load(name)
             let world = FakeWorld()
             let root = FakeAXNode.load(file.root, into: world)
-            let cache = TranscriptRowCache<FakeAXNode>()
+            let cache = Self.unlimitedCache(FakeAXNode.self)
             let read = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
             let full = fullParse(file.root, title: file.window.title)
             #expect(read.snapshot.messages.map(\.id) == full.map(\.id), "\(name)")
@@ -70,7 +77,7 @@ struct IncrementalReadTests {
         let file = try Fixture.load("synthetic_200rows")
         let world = FakeWorld()
         let root = FakeAXNode.load(file.root, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         let first = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
         #expect(first.rowsAnalyzed == first.rowsTotal)
         #expect(rowChildrenReads(world) > 0)
@@ -90,7 +97,7 @@ struct IncrementalReadTests {
         let file = try Fixture.load("synthetic_200rows")
         let world = FakeWorld()
         let root = FakeAXNode.load(file.root, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         let first = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
 
         // The user scrolls up by 300 pt: the table (document bounds) and all rows move down.
@@ -117,7 +124,7 @@ struct IncrementalReadTests {
         let file = try Fixture.load("synthetic_group_basic")
         let world = FakeWorld()
         let root = FakeAXNode.load(file.root, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         let first = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
         FakeAXNode.load(file.root.shifted(dx: -120, dy: 40), into: world)
         let second = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0 + .milliseconds(50))
@@ -134,7 +141,7 @@ struct IncrementalReadTests {
         let after = Self.smallChat(extra: true).build(note: "")
         let world = FakeWorld()
         let root = FakeAXNode.load(before.root, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         _ = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
         FakeAXNode.load(after.root, into: world)
         let read = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0 + .milliseconds(200))
@@ -158,7 +165,7 @@ struct IncrementalReadTests {
         }
         let world = FakeWorld()
         let root = FakeAXNode.load(chat(0).root, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         _ = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
         for n in 1...2 {
             let file = chat(n)
@@ -178,7 +185,7 @@ struct IncrementalReadTests {
         let file = try Fixture.load("synthetic_group_basic")
         let world = FakeWorld()
         let root = FakeAXNode.load(file.root, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         let first = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
         let narrower = file.root.modifyingFirst(role: AXRole.scrollArea) { sa in
             var s = sa
@@ -204,7 +211,7 @@ struct IncrementalReadTests {
         }
         let world = FakeWorld()
         let root = FakeAXNode.load(lazy, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         let first = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
         #expect(first.snapshot.messages.count == 4)
 
@@ -224,7 +231,7 @@ struct IncrementalReadTests {
         let file = try Fixture.load("synthetic_200rows")
         let world = FakeWorld()
         let root = FakeAXNode.load(file.root, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         let first = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
         world.resetCounters()
         // Row 0 (a divider far above the viewport) stays cached; only the empty spacer row at the bottom of
@@ -242,7 +249,7 @@ struct IncrementalReadTests {
             let file = try Fixture.load(name)
             let world = FakeWorld()
             let root = FakeAXNode.load(file.root, into: world)
-            let read = try KakaoChatReader.read(window: root.refreshed(), cache: TranscriptRowCache<FakeAXNode>(),
+            let read = try KakaoChatReader.read(window: root.refreshed(), cache: Self.unlimitedCache(FakeAXNode.self),
                                                 parser: TranscriptParser(referenceYear: file.recordedYear ?? 2026), now: t0)
             let visible = try #require(TranscriptParser(referenceYear: file.recordedYear ?? 2026).parse(window: file.root))
             let ours = read.snapshot.messages.filter { read.visibleIDs.contains($0.id) }
@@ -253,7 +260,7 @@ struct IncrementalReadTests {
         // Off-screen rows (above and below the viewport) are loaded but not visible.
         let file = try Fixture.load("synthetic_nested_offscreen")
         let root = FakeAXNode.load(file.root, into: FakeWorld())
-        let read = try KakaoChatReader.read(window: root.refreshed(), cache: TranscriptRowCache<FakeAXNode>(), parser: parser, now: t0)
+        let read = try KakaoChatReader.read(window: root.refreshed(), cache: Self.unlimitedCache(FakeAXNode.self), parser: parser, now: t0)
         #expect(read.snapshot.messages.count > read.visibleIDs.count)
         #expect(read.snapshot.messages.last?.body == "넵 알겠습니다!")
         #expect(!read.visibleIDs.contains(try #require(read.snapshot.messages.last?.id)))
@@ -266,7 +273,7 @@ struct IncrementalReadTests {
         let after = Self.smallChat(extra: true, spacer: true).build(note: "")
         let world = FakeWorld()
         let root = FakeAXNode.load(before.root, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         _ = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
         FakeAXNode.load(after.root, into: world)
         let read = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0 + .milliseconds(200))
@@ -286,7 +293,7 @@ struct IncrementalReadTests {
         }
         let world = FakeWorld()
         let root = FakeAXNode.load(file.root, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         _ = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
         FakeAXNode.load(edited, into: world)
         let soon = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0 + .seconds(1))
@@ -302,7 +309,7 @@ struct IncrementalReadTests {
         let big = try Fixture.load("synthetic_200rows")
         let small = Self.smallChat().build(note: "")
         let world = FakeWorld()
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         let root = FakeAXNode.load(big.root, into: world)
         _ = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
 
@@ -325,7 +332,7 @@ struct IncrementalReadTests {
         let file = try Fixture.load("synthetic_group_basic")
         let world = FakeWorld()
         let root = FakeAXNode.load(file.root, into: world)
-        let cache = TranscriptRowCache<FakeAXNode>()
+        let cache = Self.unlimitedCache(FakeAXNode.self)
         let first = try KakaoChatReader.read(window: root.refreshed(), cache: cache, parser: parser, now: t0)
         // The table is now wrapped in a group: the cached table identity no longer is a table.
         let wrapped = file.root.modifyingFirst(role: AXRole.scrollArea) { sa in
@@ -344,7 +351,7 @@ struct IncrementalReadTests {
         let file = try Fixture.load("synthetic_200rows")
         let root = FakeAXNode.load(file.root, into: FakeWorld())
         let capped = TranscriptParser(referenceYear: 2026, maxRows: 12)
-        let read = try KakaoChatReader.read(window: root.refreshed(), cache: TranscriptRowCache<FakeAXNode>(), parser: capped, now: t0)
+        let read = try KakaoChatReader.read(window: root.refreshed(), cache: Self.unlimitedCache(FakeAXNode.self), parser: capped, now: t0)
         let full = fullParse(file.root, title: file.window.title)
         #expect(read.snapshot.messages.count == 12)
         #expect(read.snapshot.messages.map(\.id) == Array(full.suffix(12)).map(\.id))
@@ -353,7 +360,7 @@ struct IncrementalReadTests {
     @Test("the cache also works on RecordedAXNode windows")
     func recordedNodes() throws {
         let file = try Fixture.load("selfchat_01_initial")
-        let cache = TranscriptRowCache<RecordedAXNode>()
+        let cache = Self.unlimitedCache(RecordedAXNode.self)
         let p = TranscriptParser(referenceYear: file.recordedYear ?? 2026)
         let a = try KakaoChatReader.read(window: file.root, cache: cache, parser: p, now: t0)
         let b = try KakaoChatReader.read(window: file.root, cache: cache, parser: p, now: t0 + .milliseconds(10))
