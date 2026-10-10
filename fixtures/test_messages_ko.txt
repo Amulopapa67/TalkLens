@@ -1,0 +1,33 @@
+# Synthetic test sentences for TalkLens (written by Claude for testing; no real chat content).
+# Lipper: send each non-comment line to your 나와의 채팅 (chat with yourself) by hand.
+#   - A line containing "\n" is ONE multi-line message: type Shift+Enter where "\n" appears.
+#   - Lines starting with "#" are comments; do not send them.
+# tlctl selftest reads this file too (comment lines and "\n" handling are the same).
+내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.
+교수님께서 이번 주 금요일 세미나는 온라인으로 진행한다고 하셨어요.
+넵 알겠습니다!
+ㅋㅋㅋㅋ
+ㅇㅋ ㄱㄱ
+오늘 3교시 휴강입니다. 보강 일정은 추후 공지하겠습니다.
+과제 2 마감이 10월 20일 23:59까지로 연장되었습니다.
+중간고사 범위는 1장부터 6장까지입니다.
+@린루이 혹시 오늘 저녁 회식 참석 가능하세요?
+수고하셨습니다~
+https://example.com/notice/123
+학회 포스터 초안 공유드립니다. 피드백 부탁드려요 🙏
+서버 GPU 2번은 제가 오늘 밤까지 쓸게요
+내일 오전 10시 30분에 E3-1 1501호에서 뵙겠습니다.
+ㅠㅠ 데이터셋 다운로드가 너무 느리네요
+논문 리비전 마감이 다음 주라서 이번 주는 다들 화이팅!
+출석 체크는 KLMS에서 해주세요.
+조교입니다. 질문은 수업 게시판에 올려주시면 답변드리겠습니다.
+10/15 (수) 연구실 대청소 있습니다
+아 그거 제가 착각했네요 ㅎㅎ 죄송합니다
+졸업 요건 관련해서는 학과 사무실에 문의해 보세요.
+오늘 점심 학식 vs 배달?
+안녕하세요 여러분,\n다음 주 월요일부터 실험실 출입 카드가 새로 발급됩니다.\n기존 카드는 금요일까지 행정실에 반납해 주세요.\n문의는 저에게 개인 톡 주세요.
+12345
+😂😂
+Deadline은 Friday까지예요
+好的，我知道了
+헐 대박 ㄷㄷ

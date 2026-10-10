@@ -1,0 +1,311 @@
+{
+  "_comment": "Starter glossary (ko -> zh-Hans) for TalkLens. Longest match wins. 'pattern' is a regex (NSRegularExpression); otherwise 'ko' is matched literally. 'standalone_only' entries apply only when the whole message is that token. 'expand' replaces the token before machine translation. Users can extend this via their own glossary file.",
+  "version": 1,
+  "source": "ko",
+  "target": "zh-Hans",
+  "entries": [
+    {
+      "ko": "ㅋㅋ",
+      "zh": "哈哈（笑）",
+      "kind": "slang",
+      "pattern": "ㅋ{2,}"
+    },
+    {
+      "ko": "ㅎㅎ",
+      "zh": "呵呵/嘿嘿（轻笑）",
+      "kind": "slang",
+      "pattern": "ㅎ{2,}"
+    },
+    {
+      "ko": "ㅠㅠ",
+      "zh": "呜呜（难过/哭）",
+      "kind": "slang",
+      "pattern": "[ㅠㅜ]{2,}"
+    },
+    {
+      "ko": "ㅇㅇ",
+      "zh": "嗯嗯 / 好",
+      "kind": "slang",
+      "standalone_only": true
+    },
+    {
+      "ko": "ㅇㅋ",
+      "zh": "OK",
+      "kind": "slang",
+      "expand": "오케이"
+    },
+    {
+      "ko": "ㄴㄴ",
+      "zh": "不不 / 不要",
+      "kind": "slang",
+      "standalone_only": true
+    },
+    {
+      "ko": "ㄱㄱ",
+      "zh": "走起 / 开始吧",
+      "kind": "slang",
+      "expand": "고고"
+    },
+    {
+      "ko": "ㄱㅅ",
+      "zh": "谢谢（감사）",
+      "kind": "slang",
+      "expand": "감사"
+    },
+    {
+      "ko": "ㅈㅅ",
+      "zh": "抱歉（죄송）",
+      "kind": "slang",
+      "expand": "죄송"
+    },
+    {
+      "ko": "ㅊㅋ",
+      "zh": "恭喜（축하）",
+      "kind": "slang",
+      "expand": "축하"
+    },
+    {
+      "ko": "ㅂㅂ",
+      "zh": "拜拜",
+      "kind": "slang",
+      "standalone_only": true
+    },
+    {
+      "ko": "ㅎㅇ",
+      "zh": "嗨（하이）",
+      "kind": "slang",
+      "standalone_only": true
+    },
+    {
+      "ko": "ㄷㄷ",
+      "zh": "（发抖）吓人/厉害",
+      "kind": "slang",
+      "pattern": "ㄷ{2,}"
+    },
+    {
+      "ko": "ㅅㄱ",
+      "zh": "辛苦了（수고）",
+      "kind": "slang",
+      "standalone_only": true
+    },
+    {
+      "ko": "넵",
+      "zh": "好的（礼貌、轻快）",
+      "kind": "slang",
+      "pattern": "^(넵|네넵|넹|넵넵)[!~.]*$"
+    },
+    {
+      "ko": "수고하셨습니다",
+      "zh": "辛苦了（结束时的礼貌用语）",
+      "kind": "slang"
+    },
+    {
+      "ko": "화이팅",
+      "zh": "加油",
+      "kind": "slang",
+      "pattern": "[화파]이팅"
+    },
+    {
+      "ko": "헐",
+      "zh": "天哪 / 啊？",
+      "kind": "slang"
+    },
+    {
+      "ko": "대박",
+      "zh": "太厉害了 / 离谱",
+      "kind": "slang"
+    },
+    {
+      "ko": "갑분싸",
+      "zh": "气氛突然冷场",
+      "kind": "slang"
+    },
+    {
+      "ko": "읽씹",
+      "zh": "已读不回",
+      "kind": "slang"
+    },
+    {
+      "ko": "개인 톡",
+      "zh": "私信（单聊）",
+      "kind": "slang",
+      "pattern": "개인\\s?톡"
+    },
+    {
+      "ko": "단톡방",
+      "zh": "群聊",
+      "kind": "slang",
+      "pattern": "단톡(방)?"
+    },
+    {
+      "ko": "휴강",
+      "zh": "停课",
+      "kind": "campus"
+    },
+    {
+      "ko": "보강",
+      "zh": "补课",
+      "kind": "campus"
+    },
+    {
+      "ko": "공강",
+      "zh": "（两节课之间）没课的空档",
+      "kind": "campus"
+    },
+    {
+      "ko": "과제",
+      "zh": "作业",
+      "kind": "campus"
+    },
+    {
+      "ko": "중간고사",
+      "zh": "期中考试",
+      "kind": "campus"
+    },
+    {
+      "ko": "기말고사",
+      "zh": "期末考试",
+      "kind": "campus"
+    },
+    {
+      "ko": "학점",
+      "zh": "学分 / 成绩",
+      "kind": "campus"
+    },
+    {
+      "ko": "출석",
+      "zh": "考勤 / 签到",
+      "kind": "campus"
+    },
+    {
+      "ko": "조교",
+      "zh": "助教（TA）",
+      "kind": "campus"
+    },
+    {
+      "ko": "교수님",
+      "zh": "教授（敬称）",
+      "kind": "campus"
+    },
+    {
+      "ko": "수강신청",
+      "zh": "选课",
+      "kind": "campus"
+    },
+    {
+      "ko": "학식",
+      "zh": "学校食堂",
+      "kind": "campus"
+    },
+    {
+      "ko": "행정실",
+      "zh": "行政办公室",
+      "kind": "campus"
+    },
+    {
+      "ko": "학과 사무실",
+      "zh": "系办公室",
+      "kind": "campus",
+      "pattern": "학과\\s?사무실"
+    },
+    {
+      "ko": "KLMS",
+      "zh": "KAIST 课程平台（LMS）",
+      "kind": "campus"
+    },
+    {
+      "ko": "졸업 요건",
+      "zh": "毕业要求",
+      "kind": "campus",
+      "pattern": "졸업\\s?요건"
+    },
+    {
+      "ko": "석사",
+      "zh": "硕士",
+      "kind": "campus"
+    },
+    {
+      "ko": "박사",
+      "zh": "博士",
+      "kind": "campus"
+    },
+    {
+      "ko": "선배",
+      "zh": "前辈（学长/学姐）",
+      "kind": "campus"
+    },
+    {
+      "ko": "후배",
+      "zh": "后辈（学弟/学妹）",
+      "kind": "campus"
+    },
+    {
+      "ko": "동기",
+      "zh": "同届同学",
+      "kind": "campus"
+    },
+    {
+      "ko": "랩미팅",
+      "zh": "组会",
+      "kind": "lab",
+      "pattern": "랩\\s?미팅"
+    },
+    {
+      "ko": "연구실",
+      "zh": "实验室",
+      "kind": "lab"
+    },
+    {
+      "ko": "세미나",
+      "zh": "研讨会 / 讲座",
+      "kind": "lab"
+    },
+    {
+      "ko": "학회",
+      "zh": "学术会议",
+      "kind": "lab"
+    },
+    {
+      "ko": "논문",
+      "zh": "论文",
+      "kind": "lab"
+    },
+    {
+      "ko": "리비전",
+      "zh": "修改稿（revision）",
+      "kind": "lab"
+    },
+    {
+      "ko": "마감",
+      "zh": "截止",
+      "kind": "lab"
+    },
+    {
+      "ko": "회식",
+      "zh": "（团队）聚餐",
+      "kind": "lab"
+    },
+    {
+      "ko": "대청소",
+      "zh": "大扫除",
+      "kind": "lab"
+    },
+    {
+      "ko": "출입 카드",
+      "zh": "门禁卡",
+      "kind": "lab",
+      "pattern": "출입\\s?카드"
+    },
+    {
+      "ko": "공지",
+      "zh": "通知 / 公告",
+      "kind": "lab"
+    },
+    {
+      "ko": "추후 공지",
+      "zh": "另行通知",
+      "kind": "lab",
+      "pattern": "추후\\s?공지"
+    }
+  ]
+}

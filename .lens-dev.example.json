@@ -1,0 +1,6 @@
+{
+  "_comment": "Copy to .lens-dev.json (gitignored). Only windows whose title exactly matches an entry here may have their text shown/recorded by tlctl / kakao_ax_probe. Use ONLY your own 나와의 채팅 (chat with yourself).",
+  "allowed_text_chats": [
+    "<your self-chat window title, e.g. your KakaoTalk nickname>"
+  ]
+}

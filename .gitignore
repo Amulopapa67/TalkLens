@@ -1,0 +1,13 @@
+.build/
+build/
+.swiftpm/
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+.DS_Store
+# local dev config (contains the self-chat window title)
+.lens-dev.json
+# raw AX dumps from tools/kakao_ax_probe.swift (may contain titles); curated fixtures live in fixtures/
+kakao_ax_dump*.json
+_to_delete/
+dist/
