@@ -5,8 +5,8 @@
 | 指标 | 预算 | 实测 | 方法 | 日期 |
 |---|---|---|---|---|
 | 新消息 → 译文 p50 / p95 | ≤ 600 / 1500 ms | | | |
-| 快照解析 p95（≤ 200 行） | ≤ 30 ms | | `tlctl bench` | |
-| diff p95 | ≤ 5 ms | | `tlctl bench` | |
+| 快照解析 p95（≤ 200 行） | ≤ 30 ms | **4.1 ms**（合成 205 行，全部行；真机 8 行 1.1–1.3 ms） | `tlctl bench fixtures/snapshots`（release，50 次）；`tlctl probe --summary` | 2026-10-10 |
+| diff p95 | ≤ 5 ms | **0.03 ms** | `tlctl bench fixtures/snapshots` | 2026-10-10 |
 | Apple 翻译单条 p50 / p95 | （记录） | **21.9 / 65.7 ms**（28 条逐条）；批量 28 条 500 ms | `tlctl selftest --engine apple --source ko --target zh-Hans --input fixtures/test_messages_ko.txt`（debug 构建，冷启动首条 111 ms） | 2026-10-10 |
 | 空闲 CPU（60 s） | ≤ 1% | | | |
 | 常驻内存 | ≤ 120 MB | | | |
