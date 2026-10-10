@@ -76,16 +76,14 @@ private struct SidebarHeader: View {
         HStack(spacing: 8) {
             Image(systemName: "character.bubble")
                 .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(model.chatTitle ?? "TalkLens")
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Text("\(counts.rows) 条 · 已译 \(counts.done) · 待译 \(counts.pending)"
-                     + (counts.failed > 0 ? " · 失败 \(counts.failed)" : ""))
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+            Text(model.chatTitle ?? "TalkLens")
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help("\(counts.rows) 条 · 已译 \(counts.done) · 待译 \(counts.pending)"
+                      + (counts.failed > 0 ? " · 失败 \(counts.failed)" : ""))
+            if counts.pending > 0 {
+                ProgressView().controlSize(.mini)
             }
             Spacer(minLength: 4)
             if model.status == .paused {
@@ -182,20 +180,30 @@ private struct MessageListView: View {
     @State private var unseen = 0
     private let bottomID = "talklens.bottom"
 
+    /// Author/time are shown once per run of messages with the same sender, side and time, like KakaoTalk.
+    static func showsMeta(rows: [SidebarRow], at index: Int) -> Bool {
+        guard index > 0 else { return true }
+        let prev = rows[index - 1], row = rows[index]
+        if prev.isSystem || row.isSystem { return true }
+        return !(prev.isMine == row.isMine && prev.author == row.author && prev.timeRaw == row.timeRaw)
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(model.rows) { row in
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(model.rows.enumerated()), id: \.element.id) { index, row in
                         MessageRowView(row: row, fontSize: settings.fontSize,
                                        originalVisible: model.isOriginalVisible(row.id),
+                                       showsMeta: Self.showsMeta(rows: model.rows, at: index),
                                        onToggleOriginal: { model.toggleOriginal(row.id) })
                             .id(row.id)
                             .transition(.opacity)
                     }
                     Color.clear.frame(height: 1).id(bottomID)
                 }
-                .padding(10)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
             }
             .onScrollGeometryChange(for: Bool.self) { geo in
                 geo.contentOffset.y + geo.containerSize.height >= geo.contentSize.height - 40
@@ -258,8 +266,13 @@ struct MessageRowView: View {
     let row: SidebarRow
     let fontSize: Double
     let originalVisible: Bool
+    /// False for a continuation row (same sender and time as the row above): author/time are not repeated.
+    var showsMeta: Bool = true
     let onToggleOriginal: () -> Void
     @State private var hovering = false
+
+    /// KakaoTalk-like accent for the user's own messages.
+    static let mineAccent = Color(red: 0.98, green: 0.84, blue: 0.20)
 
     var body: some View {
         if row.isSystem {
@@ -267,36 +280,37 @@ struct MessageRowView: View {
                 .font(.system(size: max(9, fontSize - 3)))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 8)
                 .padding(.vertical, 2)
+                .background(Capsule().fill(Color.primary.opacity(0.06)))
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 4)
         } else {
-            bubble
+            card
         }
     }
 
-    private var bubble: some View {
-        VStack(alignment: row.isMine ? .trailing : .leading, spacing: 3) {
-            meta
-            content
-            if !row.chips.isEmpty {
-                FlowLayout(spacing: 4) {
-                    ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in
-                        Text("\(chip.term) = \(chip.gloss)")
-                            .font(.system(size: max(9, fontSize - 3)))
-                            .lineLimit(1)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 1)
-                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                    }
-                }
+    private var card: some View {
+        HStack(alignment: .top, spacing: 8) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(row.isMine ? Self.mineAccent : Color.secondary.opacity(0.35))
+                .frame(width: 3)
+            VStack(alignment: .leading, spacing: 3) {
+                if showsMeta { meta }
+                content
+                if !row.chips.isEmpty { chips }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: row.isMine ? .trailing : .leading)
+        .padding(.vertical, 5)
+        .padding(.trailing, 6)
+        .padding(.leading, 2)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(row.isMine ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.06))
+                .fill(Color.primary.opacity(hovering ? 0.06 : 0.0))
         )
+        .contentShape(Rectangle())
+        .onTapGesture { if row.kind.needsTranslation { onToggleOriginal() } }
         .overlay(alignment: .topTrailing) {
             if hovering, let value = row.copyableTranslation {
                 Button {
@@ -305,13 +319,15 @@ struct MessageRowView: View {
                     Image(systemName: "doc.on.doc")
                         .font(.system(size: 10))
                         .padding(4)
+                        .background(Circle().fill(.regularMaterial))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help("复制译文")
                 .padding(2)
             }
         }
         .onHover { hovering = $0 }
+        .help(row.kind.needsTranslation ? (originalVisible ? "点击收起原文" : "点击显示原文") : "")
         .contextMenu {
             if let value = row.copyableTranslation {
                 Button("复制译文") { TranslationClipboard.copyTranslation(value) }
@@ -323,51 +339,74 @@ struct MessageRowView: View {
     }
 
     private var meta: some View {
-        let author = row.author ?? (row.isMine ? "我" : "")
-        let parts = [author, row.timeRaw ?? ""].filter { !$0.isEmpty }
-        return Text(parts.joined(separator: " · "))
-            .font(.system(size: max(9, fontSize - 3)))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
+        HStack(spacing: 6) {
+            if let author = row.author, !row.isMine {
+                Text(author)
+                    .font(.system(size: max(9, fontSize - 2), weight: .semibold))
+                    .lineLimit(1)
+            } else if row.isMine {
+                Text("我")
+                    .font(.system(size: max(9, fontSize - 2), weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            if let time = row.timeRaw {
+                Text(time)
+                    .font(.system(size: max(9, fontSize - 3)))
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
+        }
     }
 
     @ViewBuilder
     private var content: some View {
         let main = Font.system(size: fontSize)
         let secondary = Font.system(size: max(9, fontSize - 2))
-        let align: TextAlignment = row.isMine ? .trailing : .leading
         if row.kind.needsTranslation {
             switch row.translation {
             case .done(let value):
-                Text(value).font(main).multilineTextAlignment(align).textSelection(.enabled)
+                Text(value).font(main).lineSpacing(2).textSelection(.enabled)
             case .pending:
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     ProgressView().controlSize(.mini)
-                    Text("翻译中…").font(secondary).foregroundStyle(.secondary)
+                    Text(row.original).font(secondary).foregroundStyle(.secondary).lineLimit(2)
                 }
             case .failed(let reason):
                 Text(reason).font(secondary).foregroundStyle(.red)
             case .notNeeded:
                 EmptyView()
             }
-            if originalVisible {
-                Text(row.original).font(secondary).foregroundStyle(.secondary)
-                    .multilineTextAlignment(align).textSelection(.enabled)
+            if originalVisible, row.translation != .pending {
+                Text(row.original).font(secondary).foregroundStyle(.secondary).lineSpacing(1)
+                    .textSelection(.enabled)
             }
-            Button(originalVisible ? "收起原文" : "原文") { onToggleOriginal() }
-                .buttonStyle(.link)
-                .font(.system(size: max(9, fontSize - 4)))
         } else {
             if !row.original.isEmpty {
-                Text(row.original).font(main).multilineTextAlignment(align).textSelection(.enabled)
+                Text(row.original).font(main).textSelection(.enabled)
             }
             if let note = row.note, row.kind == .jamoOnly || row.kind == .emojiOnly {
                 Text(note).font(secondary).foregroundStyle(.secondary)
             }
         }
         if !row.attachments.isEmpty {
-            Text(attachmentLabel).font(secondary).foregroundStyle(.secondary)
+            Label(attachmentLabel, systemImage: "paperclip")
+                .font(secondary).foregroundStyle(.secondary)
         }
+    }
+
+    private var chips: some View {
+        FlowLayout(spacing: 4) {
+            ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in
+                (Text(chip.term).fontWeight(.semibold) + Text(" \(chip.gloss)").foregroundStyle(.secondary))
+                    .font(.system(size: max(9, fontSize - 3)))
+                    .lineLimit(1)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Color.primary.opacity(0.06)))
+            }
+        }
+        .padding(.top, 1)
     }
 
     private var attachmentLabel: String {
@@ -375,7 +414,7 @@ struct MessageRowView: View {
         if row.attachments.images > 0 { parts.append("图片 ×\(row.attachments.images)") }
         if row.attachments.links > 0 { parts.append("链接 ×\(row.attachments.links)") }
         if row.attachments.files > 0 { parts.append("文件 ×\(row.attachments.files)") }
-        return "[" + parts.joined(separator: " · ") + "]"
+        return parts.joined(separator: " · ")
     }
 }
 
