@@ -31,6 +31,18 @@ final class AppController {
     private var onboardingModel: OnboardingModel?
     private var screenObserver: NSObjectProtocol?
     private var statsTask: Task<Void, Never>?
+    /// Which parts of the followed chat window other windows cover (inline mode only).
+    private let occlusion = WindowOcclusion()
+    private var occlusionState: OcclusionSnapshot = .notOnScreen
+    private var occlusionTask: Task<Void, Never>?
+    private var occlusionInterval: Duration?
+    private var workspaceObservers: [NSObjectProtocol] = []
+    private var occlusionRecheckTask: Task<Void, Never>?
+    private var kakaoPID: pid_t?
+    /// Occlusion is re-checked this often while the overlay is shown (other apps' windows move without any
+    /// notification to us), and at the slow rate while it could be shown but the chat window is hidden.
+    static let occlusionInterval: Duration = .milliseconds(250)
+    static let occlusionIdleInterval: Duration = .seconds(1)
 
     init(settings: AppSettings = AppSettings(defaults: .standard),
          engine: any TranslationEngine = AppleTranslationEngine()) {
@@ -69,6 +81,8 @@ final class AppController {
         tracker.onFrontmostChange = { [weak self] _ in self?.updatePanelVisibility() }
         tracker.onTranscriptRowsChanged = { [weak self] in self?.inline?.transcriptRowsChanged() }
         applyDisplayModeToReader()
+        occlusion.warmUp()
+        subscribeWindowOrderChanges()
 
         model.setPaused(settings.paused)
         tracker.setPaused(settings.paused)
@@ -105,10 +119,17 @@ final class AppController {
     func stop() {
         statsTask?.cancel()
         statsTask = nil
+        occlusionTask?.cancel()
+        occlusionTask = nil
+        occlusionInterval = nil
+        occlusionRecheckTask?.cancel()
+        occlusionRecheckTask = nil
         tracker.stop()
         inline?.stop()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
+        for token in workspaceObservers { NSWorkspace.shared.notificationCenter.removeObserver(token) }
+        workspaceObservers = []
         onboardingModel?.stop()
         Task { [service] in
             await service.cancelAll()
@@ -158,17 +179,86 @@ final class AppController {
         guard let panel else { return }
         let front = tracker.kakaoFrontmost
         let inlineMode = isInlineMode
-        // `sidebarVisible` is the menu's "show translations" switch in both modes. The inline overlay only
-        // makes sense over a frontmost KakaoTalk, so `pinned` applies to the sidebar only.
-        let wanted = settings.sidebarVisible && (front || (!inlineMode && settings.pinned))
+        let g = tracker.geometry
+        // The overlay can only sit over a tracked, non-minimized chat window while translation runs.
+        let overlayCandidate = inlineMode && settings.sidebarVisible && !settings.paused && tracker.kakaoRunning
+            && tracker.state == .tracking && !g.minimized && g.windowAX != nil
+        refreshOcclusion(candidate: overlayCandidate)
+        let chatVisible = occlusionState.chatVisible
+        // `sidebarVisible` is the menu's "show translations" switch in both modes. The sidebar follows a
+        // frontmost KakaoTalk (or stays when pinned). The inline overlay follows the chat window itself: it
+        // stays while any part of the window is on screen, even behind other apps — whatever covers the chat
+        // window is masked out of the overlay (WindowOcclusion), so it never paints over other windows.
+        let wanted = settings.sidebarVisible && (front || (inlineMode ? chatVisible : settings.pinned))
         var visible = !inlineMode && wanted && tracker.kakaoRunning && panel.placementValid
-        if tracker.geometry.minimized { visible = false }
+        if g.minimized { visible = false }
         panel.setVisible(visible, kakaoFrontmost: front)
-        let overlayActive = inlineMode && wanted && front && tracker.kakaoRunning && tracker.state == .tracking
-            && !tracker.geometry.minimized && tracker.geometry.windowAX != nil && !settings.paused
+        let overlayActive = overlayCandidate && chatVisible
         inline?.setActive(overlayActive)
         // Nothing is read or translated while nothing can be seen; the tracker reads once on return.
         tracker.setContentWanted(wanted)
+        scheduleOcclusionChecks(candidate: overlayCandidate, shown: overlayActive)
+    }
+
+    // MARK: - Occlusion (inline mode)
+
+    /// Window-server metadata only; no IPC to KakaoTalk. Pushes changed occluder rects to the overlay.
+    private func refreshOcclusion(candidate: Bool) {
+        if !tracker.kakaoRunning { kakaoPID = nil }
+        let next: OcclusionSnapshot
+        if candidate, let frame = tracker.geometry.windowAX, let pid = kakaoPID ?? KakaoProcess.processIdentifier {
+            kakaoPID = pid
+            next = occlusion.update(kakaoPID: pid, chatFrame: frame)
+        } else {
+            if occlusion.last != .notOnScreen { occlusion.reset() }
+            next = .notOnScreen
+        }
+        guard next != occlusionState else { return }
+        occlusionState = next
+        inline?.setOccluders(next.occluders)
+    }
+
+    /// Other apps' windows move, open and close without telling us: re-check on a timer while the overlay is
+    /// shown (fast) or could be shown once the chat window is on screen again (slow).
+    private func scheduleOcclusionChecks(candidate: Bool, shown: Bool) {
+        let interval: Duration? = candidate ? (shown ? Self.occlusionInterval : Self.occlusionIdleInterval) : nil
+        guard interval != occlusionInterval else { return }
+        occlusionInterval = interval
+        occlusionTask?.cancel()
+        occlusionTask = nil
+        guard let interval else { return }
+        occlusionTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval, tolerance: interval / 5)
+                guard !Task.isCancelled, let self else { return }
+                self.updatePanelVisibility()
+            }
+        }
+    }
+
+    /// App activation, hide/unhide and Space switches reorder windows: re-check at once and again shortly
+    /// after (the activated app may order its windows front a moment later).
+    private func subscribeWindowOrderChanges() {
+        let center = NSWorkspace.shared.notificationCenter
+        let names = [NSWorkspace.didActivateApplicationNotification, NSWorkspace.didHideApplicationNotification,
+                     NSWorkspace.didUnhideApplicationNotification, NSWorkspace.activeSpaceDidChangeNotification]
+        for name in names {
+            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.windowOrderChanged() }
+            }
+            workspaceObservers.append(token)
+        }
+    }
+
+    private func windowOrderChanged() {
+        updatePanelVisibility()
+        occlusionRecheckTask?.cancel()
+        occlusionRecheckTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled, let self else { return }
+            self.occlusionRecheckTask = nil
+            self.updatePanelVisibility()
+        }
     }
 
     private func applyDisplayModeToReader() {
