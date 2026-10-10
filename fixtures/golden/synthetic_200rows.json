@@ -1,0 +1,146 @@
+{
+  "messages" : [
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "중간고사 범위는 1장부터 6장까지입니다.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "9415dda01abf26a6",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 9:15",
+      "translation" : "[mock→zh-Hans] 중간고사 범위는 1장부터 6장까지입니다."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "출석 체크는 KLMS에서 해주세요.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "8760a92b5dc1bd71",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 9:15",
+      "translation" : "[mock→zh-Hans] 출석 체크는 KLMS에서 해주세요."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "94e8bb9eb10c5a4f",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 9:16",
+      "translation" : "[mock→zh-Hans] 내일 랩미팅은 오후 2시에서 4시로 변경되었습니다."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "중간고사 범위는 1장부터 6장까지입니다.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "c479d0c4587cfb5b",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 9:16",
+      "translation" : "[mock→zh-Hans] 중간고사 범위는 1장부터 6장까지입니다."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "최지우",
+      "body" : "출석 체크는 KLMS에서 해주세요.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "2b515ae14f3c6d65",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 9:16",
+      "translation" : "[mock→zh-Hans] 출석 체크는 KLMS에서 해주세요."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.\n(198)",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "a62f6f17aaee6b1c",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 9:16",
+      "translation" : "[mock→zh-Hans] 내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.\n(198)"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "최지우",
+      "body" : "중간고사 범위는 1장부터 6장까지입니다.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "e670af1ed0094e59",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 9:17",
+      "translation" : "[mock→zh-Hans] 중간고사 범위는 1장부터 6장까지입니다."
+    }
+  ],
+  "snapshot" : "synthetic_200rows",
+  "source" : "synthetic"
+}

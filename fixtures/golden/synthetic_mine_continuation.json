@@ -1,0 +1,206 @@
+{
+  "messages" : [
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "서버 GPU 2번은 제가 오늘 밤까지 쓸게요",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "0f49a20afef6253f",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 10:02",
+      "translation" : "[mock→zh-Hans] 서버 GPU 2번은 제가 오늘 밤까지 쓸게요"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "아 그거 제가 착각했네요 ㅎㅎ 죄송합니다",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "d99d3a798c751eba",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 10:05",
+      "translation" : "[mock→zh-Hans] 아 그거 제가 착각했네요 ㅎㅎ 죄송합니다"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "Deadline은 Friday까지예요",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "77e2fb2fc130a63d",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 10:05",
+      "translation" : "[mock→zh-Hans] Deadline은 Friday까지예요"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "好的，我知道了",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "31ccbaaf21f037f0",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 10:05",
+      "translation" : "[mock→zh-Hans] 好的，我知道了"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "헐 대박 ㄷㄷ",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "d1a443391f8fe30a",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 10:06",
+      "translation" : "[mock→zh-Hans] 헐 대박 ㄷㄷ"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "😂😂",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "76a2a70b15622cd0",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 10:07",
+      "translation" : "[mock→zh-Hans] 😂😂"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "12345",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "77f34799f91653e4",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 10:07",
+      "translation" : "[mock→zh-Hans] 12345"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "ㅋㅋㅋㅋ",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "12e22751befd2fe1",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 10:09",
+      "translation" : "[mock→zh-Hans] ㅋㅋㅋㅋ"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "ㅋㅋㅋㅋ",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "12e22751befd2fe1#1",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 10:09",
+      "translation" : "[mock→zh-Hans] ㅋㅋㅋㅋ"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "넵 알겠습니다!",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "7ff6f845df215482",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 10:10",
+      "translation" : "[mock→zh-Hans] 넵 알겠습니다!"
+    }
+  ],
+  "snapshot" : "synthetic_mine_continuation",
+  "source" : "synthetic"
+}

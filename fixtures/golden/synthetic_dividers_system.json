@@ -1,0 +1,206 @@
+{
+  "messages" : [
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "2026년 10월 9일 목요일",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "78deedbef2aee47c",
+      "isMine" : false,
+      "isSystem" : true,
+      "kind" : "system",
+      "note" : null,
+      "timeRaw" : null,
+      "translation" : null
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "김민준",
+      "body" : "오늘 3교시 휴강입니다. 보강 일정은 추후 공지하겠습니다.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "1ff90c1969ac543e",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오후 9:40",
+      "translation" : "[mock→zh-Hans] 오늘 3교시 휴강입니다. 보강 일정은 추후 공지하겠습니다."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "박서연님이 들어왔습니다.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "cb10f9bddd3cc0f4",
+      "isMine" : false,
+      "isSystem" : true,
+      "kind" : "system",
+      "note" : null,
+      "timeRaw" : null,
+      "translation" : null
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "조교입니다. 질문은 수업 게시판에 올려주시면 답변드리겠습니다.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-09",
+      "id" : "413a72249a7991b6",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오후 11:58",
+      "translation" : "[mock→zh-Hans] 조교입니다. 질문은 수업 게시판에 올려주시면 답변드리겠습니다."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "2026년 10월 10일 금요일",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "0e8286de194eed2d",
+      "isMine" : false,
+      "isSystem" : true,
+      "kind" : "system",
+      "note" : null,
+      "timeRaw" : null,
+      "translation" : null
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "이도윤",
+      "body" : "출석 체크는 KLMS에서 해주세요.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "db4d8894e600f403",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 9:01",
+      "translation" : "[mock→zh-Hans] 출석 체크는 KLMS에서 해주세요."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "이도윤님이 나갔습니다.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "4abbb2cdc57ed447",
+      "isMine" : false,
+      "isSystem" : true,
+      "kind" : "system",
+      "note" : null,
+      "timeRaw" : null,
+      "translation" : null
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "10/15 (수) 연구실 대청소 있습니다",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "52de776f515468c6",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오전 9:30",
+      "translation" : "[mock→zh-Hans] 10/15 (수) 연구실 대청소 있습니다"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "10월 11일 토요일",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-11",
+      "id" : "c5a6121a1046a879",
+      "isMine" : false,
+      "isSystem" : true,
+      "kind" : "system",
+      "note" : null,
+      "timeRaw" : null,
+      "translation" : null
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "김민준",
+      "body" : "중간고사 범위는 1장부터 6장까지입니다.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-11",
+      "id" : "785775550d369b35",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오후 1:00",
+      "translation" : "[mock→zh-Hans] 중간고사 범위는 1장부터 6장까지입니다."
+    }
+  ],
+  "snapshot" : "synthetic_dividers_system",
+  "source" : "synthetic"
+}

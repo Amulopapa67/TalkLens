@@ -1,0 +1,146 @@
+{
+  "messages" : [
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "김민준",
+      "body" : "내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "bf574908bee79599",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오후 3:12",
+      "translation" : "[mock→zh-Hans] 내일 랩미팅은 오후 2시에서 4시로 변경되었습니다."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "김민준",
+      "body" : "교수님께서 이번 주 금요일 세미나는 온라인으로 진행한다고 하셨어요.",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "7dc4cdb1bf8b3aef",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오후 3:12",
+      "translation" : "[mock→zh-Hans] 교수님께서 이번 주 금요일 세미나는 온라인으로 진행한다고 하셨어요."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "넵 알겠습니다!",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "c22ffcff2dfce69c",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오후 3:13",
+      "translation" : "[mock→zh-Hans] 넵 알겠습니다!"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "박서연",
+      "body" : "ㅋㅋㅋㅋ",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "6121bbbd38bb379c",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오후 3:14",
+      "translation" : "[mock→zh-Hans] ㅋㅋㅋㅋ"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "이도윤",
+      "body" : "ㅇㅋ ㄱㄱ",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "8c4734b15ba77a82",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오후 3:14",
+      "translation" : "[mock→zh-Hans] ㅇㅋ ㄱㄱ"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : "이도윤",
+      "body" : "수고하셨습니다~",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "660179a6f5ba4eec",
+      "isMine" : false,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오후 3:15",
+      "translation" : "[mock→zh-Hans] 수고하셨습니다~"
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "오늘 점심 학식 vs 배달?",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "b4698b313050dec1",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "오후 3:16",
+      "translation" : "[mock→zh-Hans] 오늘 점심 학식 vs 배달?"
+    }
+  ],
+  "snapshot" : "synthetic_group_basic",
+  "source" : "synthetic"
+}
