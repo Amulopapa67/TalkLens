@@ -1,0 +1,787 @@
+{
+  "meta" : {
+    "note" : "Hand-built (Tests/TalkLensTests/KakaoAX/SyntheticFixtureBuilder.swift); window geometry mirrors a redacted KakaoTalk 26.8.0 chat window, others' rows are assumptions. Text-bearing date dividers (button and static text; with and without year), join/leave notices, dates without AXHelp, year-less AXHelp.",
+    "recordedAt" : "2026-10-10T12:00:00Z",
+    "source" : "synthetic"
+  },
+  "root" : {
+    "children" : [
+      {
+        "children" : [
+          {
+            "children" : [
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "description" : "",
+                        "frame" : [
+                          656,
+                          334,
+                          200,
+                          28
+                        ],
+                        "role" : "AXButton",
+                        "title" : "2026년 10월 9일 목요일"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      325,
+                      380,
+                      36
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  325,
+                  380,
+                  36
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "description" : "김민준",
+                        "frame" : [
+                          576,
+                          371,
+                          40,
+                          40
+                        ],
+                        "role" : "AXButton"
+                      },
+                      {
+                        "frame" : [
+                          626,
+                          371,
+                          38,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "김민준"
+                      },
+                      {
+                        "frame" : [
+                          622,
+                          391,
+                          292,
+                          47
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          627,
+                          399,
+                          279,
+                          32
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "오늘 3교시 휴강입니다. 보강 일정은 추후 공지하겠습니다."
+                      },
+                      {
+                        "frame" : [
+                          918,
+                          423,
+                          43,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "오후 9:40"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      361,
+                      380,
+                      77
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  361,
+                  380,
+                  77
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          680,
+                          448,
+                          152,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "박서연님이 들어왔습니다."
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      438,
+                      380,
+                      36
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  438,
+                  380,
+                  36
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "description" : "박서연",
+                        "frame" : [
+                          576,
+                          484,
+                          40,
+                          40
+                        ],
+                        "role" : "AXButton"
+                      },
+                      {
+                        "frame" : [
+                          626,
+                          484,
+                          38,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "박서연"
+                      },
+                      {
+                        "frame" : [
+                          622,
+                          504,
+                          292,
+                          47
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          627,
+                          512,
+                          279,
+                          32
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "조교입니다. 질문은 수업 게시판에 올려주시면 답변드리겠습니다."
+                      },
+                      {
+                        "frame" : [
+                          918,
+                          536,
+                          43,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "오후 11:58"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      474,
+                      380,
+                      77
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  474,
+                  380,
+                  77
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          680,
+                          561,
+                          152,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "2026년 10월 10일 금요일"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      551,
+                      380,
+                      36
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  551,
+                  380,
+                  36
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "description" : "이도윤",
+                        "frame" : [
+                          576,
+                          597,
+                          40,
+                          40
+                        ],
+                        "role" : "AXButton"
+                      },
+                      {
+                        "frame" : [
+                          626,
+                          597,
+                          38,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "이도윤"
+                      },
+                      {
+                        "frame" : [
+                          622,
+                          617,
+                          207,
+                          31
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          627,
+                          625,
+                          194,
+                          16
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "출석 체크는 KLMS에서 해주세요."
+                      },
+                      {
+                        "frame" : [
+                          833,
+                          633,
+                          43,
+                          16
+                        ],
+                        "help" : "10월 10일",
+                        "role" : "AXStaticText",
+                        "value" : "오전 9:01"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      587,
+                      380,
+                      61
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  587,
+                  380,
+                  61
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          687,
+                          658,
+                          139,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "이도윤님이 나갔습니다."
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      648,
+                      380,
+                      36
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  648,
+                  380,
+                  36
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          661,
+                          710,
+                          43,
+                          16
+                        ],
+                        "help" : "2026. 10. 10.",
+                        "role" : "AXStaticText",
+                        "value" : "오전 9:30"
+                      },
+                      {
+                        "frame" : [
+                          708,
+                          694,
+                          228,
+                          31
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          713,
+                          702,
+                          215,
+                          16
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "10/15 (수) 연구실 대청소 있습니다"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      684,
+                      380,
+                      41
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  684,
+                  380,
+                  41
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "description" : "",
+                        "frame" : [
+                          656,
+                          734,
+                          200,
+                          28
+                        ],
+                        "role" : "AXButton",
+                        "title" : "10월 11일 토요일"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      725,
+                      380,
+                      36
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  725,
+                  380,
+                  36
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "description" : "김민준",
+                        "frame" : [
+                          576,
+                          771,
+                          40,
+                          40
+                        ],
+                        "role" : "AXButton"
+                      },
+                      {
+                        "frame" : [
+                          626,
+                          771,
+                          38,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "김민준"
+                      },
+                      {
+                        "frame" : [
+                          622,
+                          791,
+                          255,
+                          31
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          627,
+                          799,
+                          242,
+                          16
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "중간고사 범위는 1장부터 6장까지입니다."
+                      },
+                      {
+                        "frame" : [
+                          881,
+                          807,
+                          43,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "오후 1:00"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      761,
+                      380,
+                      61
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  761,
+                  380,
+                  61
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "frame" : [
+                      566,
+                      822,
+                      380,
+                      15
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  822,
+                  380,
+                  15
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "frame" : [
+                  566,
+                  285,
+                  380,
+                  552
+                ],
+                "identifier" : "AutomaticTableColumnIdentifier.0",
+                "role" : "AXColumn"
+              }
+            ],
+            "frame" : [
+              565,
+              324,
+              382,
+              554
+            ],
+            "identifier" : "_NS:33",
+            "role" : "AXTable"
+          }
+        ],
+        "frame" : [
+          566,
+          285,
+          380,
+          552
+        ],
+        "identifier" : "_NS:29",
+        "role" : "AXScrollArea"
+      },
+      {
+        "description" : "프로필 보기",
+        "frame" : [
+          580,
+          235,
+          40,
+          40
+        ],
+        "identifier" : "_NS:164",
+        "role" : "AXButton"
+      },
+      {
+        "frame" : [
+          631,
+          244.5,
+          70,
+          21
+        ],
+        "help" : "합성 공지방",
+        "identifier" : "_NS:144",
+        "role" : "AXStaticText",
+        "value" : "합성 공지방"
+      },
+      {
+        "description" : "검색",
+        "frame" : [
+          849,
+          240,
+          32,
+          32
+        ],
+        "help" : "대화 내용 검색",
+        "identifier" : "_NS:10",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "톡서랍",
+        "frame" : [
+          879,
+          240,
+          32,
+          32
+        ],
+        "identifier" : "_NS:54",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "메뉴",
+        "frame" : [
+          909,
+          240,
+          32,
+          32
+        ],
+        "identifier" : "_NS:78",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "children" : [
+          {
+            "frame" : [
+              920,
+              203,
+              16,
+              16
+            ],
+            "role" : "AXValueIndicator"
+          }
+        ],
+        "frame" : [
+          875,
+          202,
+          62,
+          18
+        ],
+        "identifier" : "_NS:182",
+        "role" : "AXSlider",
+        "value" : "1"
+      },
+      {
+        "children" : [
+          {
+            "description" : "메시지 입력",
+            "frame" : [
+              576,
+              848,
+              370,
+              65
+            ],
+            "identifier" : "_NS:51",
+            "role" : "AXTextArea"
+          }
+        ],
+        "frame" : [
+          576,
+          848,
+          370,
+          65
+        ],
+        "identifier" : "_NS:47",
+        "role" : "AXScrollArea"
+      },
+      {
+        "description" : "",
+        "frame" : [
+          575,
+          922,
+          26,
+          26
+        ],
+        "help" : "이모티콘",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "",
+        "frame" : [
+          607,
+          922,
+          26,
+          26
+        ],
+        "help" : "파일 전송",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "",
+        "frame" : [
+          639,
+          922,
+          26,
+          26
+        ],
+        "help" : "더보기",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "enabled" : false,
+        "frame" : [
+          877,
+          918,
+          62,
+          32
+        ],
+        "role" : "AXButton",
+        "title" : "전송"
+      },
+      {
+        "description" : "새 기능 알림",
+        "frame" : [
+          627,
+          924,
+          6,
+          6
+        ],
+        "role" : "AXImage"
+      },
+      {
+        "frame" : [
+          574,
+          205,
+          16,
+          16
+        ],
+        "role" : "AXButton",
+        "subrole" : "AXCloseButton"
+      },
+      {
+        "frame" : [
+          620,
+          205,
+          16,
+          16
+        ],
+        "help" : "전체 화면으로 전환",
+        "role" : "AXButton",
+        "subrole" : "AXFullScreenButton"
+      },
+      {
+        "frame" : [
+          597,
+          205,
+          16,
+          16
+        ],
+        "role" : "AXButton",
+        "subrole" : "AXMinimizeButton"
+      }
+    ],
+    "frame" : [
+      566,
+      197,
+      380,
+      760
+    ],
+    "identifier" : "_NS:443",
+    "role" : "AXWindow",
+    "subrole" : "AXStandardWindow",
+    "title" : "합성 공지방"
+  },
+  "window" : {
+    "frame" : [
+      566,
+      197,
+      380,
+      760
+    ],
+    "title" : "합성 공지방"
+  }
+}

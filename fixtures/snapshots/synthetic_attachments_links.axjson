@@ -1,0 +1,858 @@
+{
+  "meta" : {
+    "note" : "Hand-built (Tests/TalkLensTests/KakaoAX/SyntheticFixtureBuilder.swift); window geometry mirrors a redacted KakaoTalk 26.8.0 chat window, others' rows are assumptions. Image, sticker, file and link messages (with previews and a truncated URL).",
+    "recordedAt" : "2026-10-10T12:00:00Z",
+    "source" : "synthetic"
+  },
+  "root" : {
+    "children" : [
+      {
+        "children" : [
+          {
+            "children" : [
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "description" : "김민준",
+                        "frame" : [
+                          576,
+                          207,
+                          40,
+                          40
+                        ],
+                        "role" : "AXButton"
+                      },
+                      {
+                        "frame" : [
+                          626,
+                          207,
+                          38,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "김민준"
+                      },
+                      {
+                        "description" : "이미지",
+                        "frame" : [
+                          622,
+                          227,
+                          160,
+                          120
+                        ],
+                        "role" : "AXImage"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      197,
+                      380,
+                      150
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  197,
+                  380,
+                  150
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          622,
+                          352,
+                          223,
+                          31
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          627,
+                          360,
+                          210,
+                          16
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "https://example.com/notice/123"
+                      },
+                      {
+                        "frame" : [
+                          627,
+                          360,
+                          210,
+                          16
+                        ],
+                        "role" : "AXLink",
+                        "title" : "https://example.com/notice/123"
+                      },
+                      {
+                        "children" : [
+                          {
+                            "frame" : [
+                              630,
+                              393,
+                              180,
+                              16
+                            ],
+                            "role" : "AXStaticText",
+                            "value" : "학과 공지사항"
+                          },
+                          {
+                            "frame" : [
+                              630,
+                              417,
+                              120,
+                              14
+                            ],
+                            "role" : "AXStaticText",
+                            "value" : "example.com"
+                          }
+                        ],
+                        "frame" : [
+                          622,
+                          387,
+                          220,
+                          56
+                        ],
+                        "role" : "AXGroup"
+                      },
+                      {
+                        "frame" : [
+                          849,
+                          428,
+                          43,
+                          16
+                        ],
+                        "help" : "2026. 10. 10.",
+                        "role" : "AXStaticText",
+                        "value" : "오후 2:01"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      347,
+                      380,
+                      96
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  347,
+                  380,
+                  96
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          644,
+                          453,
+                          292,
+                          47
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          649,
+                          461,
+                          279,
+                          32
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "학회 포스터 초안 공유드립니다. 피드백 부탁드려요 🙏"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      443,
+                      380,
+                      57
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  443,
+                  380,
+                  57
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          729,
+                          610,
+                          43,
+                          16
+                        ],
+                        "help" : "2026. 10. 10.",
+                        "role" : "AXStaticText",
+                        "value" : "오후 2:03"
+                      },
+                      {
+                        "description" : "이미지",
+                        "frame" : [
+                          776,
+                          505,
+                          160,
+                          120
+                        ],
+                        "role" : "AXImage"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      500,
+                      380,
+                      125
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  500,
+                  380,
+                  125
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "description" : "박서연",
+                        "frame" : [
+                          576,
+                          635,
+                          40,
+                          40
+                        ],
+                        "role" : "AXButton"
+                      },
+                      {
+                        "frame" : [
+                          626,
+                          635,
+                          38,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "박서연"
+                      },
+                      {
+                        "children" : [
+                          {
+                            "frame" : [
+                              634,
+                              665,
+                              180,
+                              16
+                            ],
+                            "role" : "AXStaticText",
+                            "value" : "과제2_보고서.pdf"
+                          },
+                          {
+                            "frame" : [
+                              634,
+                              685,
+                              150,
+                              14
+                            ],
+                            "role" : "AXStaticText",
+                            "value" : "유효기간 ~ 2026. 10. 24. · 용량 1.2MB"
+                          },
+                          {
+                            "frame" : [
+                              786,
+                              691,
+                              48,
+                              20
+                            ],
+                            "role" : "AXButton",
+                            "title" : "저장"
+                          }
+                        ],
+                        "frame" : [
+                          622,
+                          655,
+                          220,
+                          64
+                        ],
+                        "role" : "AXGroup"
+                      },
+                      {
+                        "frame" : [
+                          846,
+                          704,
+                          43,
+                          16
+                        ],
+                        "help" : "2026. 10. 10.",
+                        "role" : "AXStaticText",
+                        "value" : "오후 2:05"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      625,
+                      380,
+                      94
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  625,
+                  380,
+                  94
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          622,
+                          724,
+                          292,
+                          47
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          627,
+                          732,
+                          279,
+                          32
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "자료는 여기 있어요 https://example.com/files/share/2026/fall/..."
+                      },
+                      {
+                        "frame" : [
+                          627,
+                          732,
+                          279,
+                          32
+                        ],
+                        "role" : "AXLink",
+                        "title" : "https://example.com/files/share/2026/fall/lab-seminar-schedule"
+                      },
+                      {
+                        "children" : [
+                          {
+                            "frame" : [
+                              630,
+                              781,
+                              180,
+                              16
+                            ],
+                            "role" : "AXStaticText",
+                            "value" : "학과 공지사항"
+                          },
+                          {
+                            "frame" : [
+                              630,
+                              805,
+                              120,
+                              14
+                            ],
+                            "role" : "AXStaticText",
+                            "value" : "example.com"
+                          }
+                        ],
+                        "frame" : [
+                          622,
+                          775,
+                          220,
+                          56
+                        ],
+                        "role" : "AXGroup"
+                      },
+                      {
+                        "frame" : [
+                          918,
+                          816,
+                          43,
+                          16
+                        ],
+                        "help" : "2026. 10. 10.",
+                        "role" : "AXStaticText",
+                        "value" : "오후 2:05"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      719,
+                      380,
+                      112
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  719,
+                  380,
+                  112
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "description" : "이도윤",
+                        "frame" : [
+                          576,
+                          841,
+                          40,
+                          40
+                        ],
+                        "role" : "AXButton"
+                      },
+                      {
+                        "frame" : [
+                          626,
+                          841,
+                          38,
+                          16
+                        ],
+                        "role" : "AXStaticText",
+                        "value" : "이도윤"
+                      },
+                      {
+                        "description" : "이미지",
+                        "frame" : [
+                          622,
+                          861,
+                          100,
+                          100
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          726,
+                          946,
+                          43,
+                          16
+                        ],
+                        "help" : "2026. 10. 10.",
+                        "role" : "AXStaticText",
+                        "value" : "오후 2:06"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      831,
+                      380,
+                      130
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  831,
+                  380,
+                  130
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          666,
+                          1047,
+                          43,
+                          16
+                        ],
+                        "help" : "2026. 10. 10.",
+                        "role" : "AXStaticText",
+                        "value" : "오후 2:07"
+                      },
+                      {
+                        "frame" : [
+                          713,
+                          971,
+                          223,
+                          31
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          718,
+                          979,
+                          210,
+                          16
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "https://example.com/notice/123"
+                      },
+                      {
+                        "frame" : [
+                          718,
+                          979,
+                          210,
+                          16
+                        ],
+                        "role" : "AXLink",
+                        "title" : "https://example.com/notice/123"
+                      },
+                      {
+                        "children" : [
+                          {
+                            "frame" : [
+                              721,
+                              1012,
+                              180,
+                              16
+                            ],
+                            "role" : "AXStaticText",
+                            "value" : "학과 공지사항"
+                          },
+                          {
+                            "frame" : [
+                              721,
+                              1036,
+                              120,
+                              14
+                            ],
+                            "role" : "AXStaticText",
+                            "value" : "example.com"
+                          }
+                        ],
+                        "frame" : [
+                          713,
+                          1006,
+                          220,
+                          56
+                        ],
+                        "role" : "AXGroup"
+                      }
+                    ],
+                    "frame" : [
+                      566,
+                      961,
+                      380,
+                      101
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  961,
+                  380,
+                  101
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "frame" : [
+                      566,
+                      1062,
+                      380,
+                      15
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  566,
+                  1062,
+                  380,
+                  15
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "frame" : [
+                  566,
+                  285,
+                  380,
+                  792
+                ],
+                "identifier" : "AutomaticTableColumnIdentifier.0",
+                "role" : "AXColumn"
+              }
+            ],
+            "frame" : [
+              565,
+              196,
+              382,
+              912
+            ],
+            "identifier" : "_NS:33",
+            "role" : "AXTable"
+          }
+        ],
+        "frame" : [
+          566,
+          285,
+          380,
+          792
+        ],
+        "identifier" : "_NS:29",
+        "role" : "AXScrollArea"
+      },
+      {
+        "description" : "프로필 보기",
+        "frame" : [
+          580,
+          235,
+          40,
+          40
+        ],
+        "identifier" : "_NS:164",
+        "role" : "AXButton"
+      },
+      {
+        "frame" : [
+          631,
+          244.5,
+          70,
+          21
+        ],
+        "help" : "합성 자료방",
+        "identifier" : "_NS:144",
+        "role" : "AXStaticText",
+        "value" : "합성 자료방"
+      },
+      {
+        "description" : "검색",
+        "frame" : [
+          849,
+          240,
+          32,
+          32
+        ],
+        "help" : "대화 내용 검색",
+        "identifier" : "_NS:10",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "톡서랍",
+        "frame" : [
+          879,
+          240,
+          32,
+          32
+        ],
+        "identifier" : "_NS:54",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "메뉴",
+        "frame" : [
+          909,
+          240,
+          32,
+          32
+        ],
+        "identifier" : "_NS:78",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "children" : [
+          {
+            "frame" : [
+              920,
+              203,
+              16,
+              16
+            ],
+            "role" : "AXValueIndicator"
+          }
+        ],
+        "frame" : [
+          875,
+          202,
+          62,
+          18
+        ],
+        "identifier" : "_NS:182",
+        "role" : "AXSlider",
+        "value" : "1"
+      },
+      {
+        "children" : [
+          {
+            "description" : "메시지 입력",
+            "frame" : [
+              576,
+              1088,
+              370,
+              65
+            ],
+            "identifier" : "_NS:51",
+            "role" : "AXTextArea"
+          }
+        ],
+        "frame" : [
+          576,
+          1088,
+          370,
+          65
+        ],
+        "identifier" : "_NS:47",
+        "role" : "AXScrollArea"
+      },
+      {
+        "description" : "",
+        "frame" : [
+          575,
+          1162,
+          26,
+          26
+        ],
+        "help" : "이모티콘",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "",
+        "frame" : [
+          607,
+          1162,
+          26,
+          26
+        ],
+        "help" : "파일 전송",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "",
+        "frame" : [
+          639,
+          1162,
+          26,
+          26
+        ],
+        "help" : "더보기",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "enabled" : false,
+        "frame" : [
+          877,
+          1158,
+          62,
+          32
+        ],
+        "role" : "AXButton",
+        "title" : "전송"
+      },
+      {
+        "description" : "새 기능 알림",
+        "frame" : [
+          627,
+          1164,
+          6,
+          6
+        ],
+        "role" : "AXImage"
+      },
+      {
+        "frame" : [
+          574,
+          205,
+          16,
+          16
+        ],
+        "role" : "AXButton",
+        "subrole" : "AXCloseButton"
+      },
+      {
+        "frame" : [
+          620,
+          205,
+          16,
+          16
+        ],
+        "help" : "전체 화면으로 전환",
+        "role" : "AXButton",
+        "subrole" : "AXFullScreenButton"
+      },
+      {
+        "frame" : [
+          597,
+          205,
+          16,
+          16
+        ],
+        "role" : "AXButton",
+        "subrole" : "AXMinimizeButton"
+      }
+    ],
+    "frame" : [
+      566,
+      197,
+      380,
+      1000
+    ],
+    "identifier" : "_NS:443",
+    "role" : "AXWindow",
+    "subrole" : "AXStandardWindow",
+    "title" : "합성 자료방"
+  },
+  "window" : {
+    "frame" : [
+      566,
+      197,
+      380,
+      1000
+    ],
+    "title" : "합성 자료방"
+  }
+}

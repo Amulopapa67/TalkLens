@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // AXNodeLike backed by a recorded .axjson fixture (docs/architecture.md §8).
-// STUB — core-dev: finish (frame encoded as [x, y, w, h]).
+// Frames are encoded as [x, y, w, h] in AX global coordinates. nil attributes and empty children are omitted.
 
 import CoreGraphics
 import Foundation
@@ -54,6 +54,23 @@ public struct RecordedAXNode: AXNodeLike, Codable, Sendable, Hashable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled)
         children = try c.decodeIfPresent([RecordedAXNode].self, forKey: .children) ?? []
     }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(role, forKey: .role)
+        try c.encodeIfPresent(subrole, forKey: .subrole)
+        try c.encodeIfPresent(identifier, forKey: .identifier)
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(value, forKey: .value)
+        try c.encodeIfPresent(nodeDescription, forKey: .nodeDescription)
+        try c.encodeIfPresent(help, forKey: .help)
+        try c.encodeIfPresent(rect, forKey: .rect)
+        try c.encodeIfPresent(enabled, forKey: .enabled)
+        if !children.isEmpty { try c.encode(children, forKey: .children) }
+    }
+
+    /// Total number of nodes in this subtree (self included).
+    public var nodeCount: Int { 1 + children.reduce(0) { $0 + $1.nodeCount } }
 }
 
 /// [x, y, w, h] JSON array.
@@ -77,7 +94,8 @@ public struct AXRectArray: Codable, Sendable, Hashable {
 /// Whole .axjson file.
 public struct AXSnapshotFile: Codable, Sendable {
     public struct Meta: Codable, Sendable, Hashable {
-        /// "self-chat" or "synthetic"
+        /// "self-chat" (allowlisted 나와의 채팅), "synthetic" (hand-built), or "redacted-live"
+        /// (a redacted live recording — must never be committed to fixtures/snapshots).
         public var source: String
         public var kakaoVersion: String?
         public var macOS: String?
@@ -113,5 +131,21 @@ public struct AXSnapshotFile: Codable, Sendable {
 
     public static func load(contentsOf url: URL) throws -> AXSnapshotFile {
         try JSONDecoder().decode(AXSnapshotFile.self, from: Data(contentsOf: url))
+    }
+
+    /// Sorted-key JSON with a trailing newline. `pretty: false` keeps large fixtures compact.
+    public func encoded(pretty: Bool = true) throws -> Data {
+        let enc = JSONEncoder()
+        enc.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                                      : [.sortedKeys, .withoutEscapingSlashes]
+        var data = try enc.encode(self)
+        data.append(0x0A)
+        return data
+    }
+
+    /// Year of `meta.recordedAt` ("2026-10-10T…"), used as the parser's reference year.
+    public var recordedYear: Int? {
+        guard let s = meta.recordedAt, s.count >= 4, let y = Int(s.prefix(4)), (1900...2999).contains(y) else { return nil }
+        return y
     }
 }
