@@ -96,3 +96,10 @@
   - 决定：`panel.alphaValue` 固定为 1，透明度只调背景的纯色填充；材质用 `.windowBackground`，默认 0.96。
   - 理由：原来整窗 alpha 会让文字一起变淡，后面窗口的字透过来，很难读。
   - 日期：2026-10-10
+- **D-019 覆盖层用窗口元信息做遮挡遮罩**
+  - 决定：用 `CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements])` 拿到从前到后排好的窗口列表，只用 bounds/pid/layer/alpha，不取窗口图像。按 pid + bounds 匹配被跟随的聊天窗口；排在它前面、层级 0…3 的窗口就是遮挡物（不含本 App 浮动层的窗口）。覆盖层用 CAShapeLayer 遮罩挖掉"可见区 − 遮挡物的并集"。
+  - 显示规则：只要聊天窗口在当前屏幕上、没被完全盖住、没最小化，即使 KakaoTalk 不在前台也显示覆盖层，被遮挡的部分由遮罩隐藏。
+  - 重算时机：App 激活、Space 切换、窗口移动，以及显示期间每 250 ms 一次；结果没变就跳过（每次 0.4–2 ms）。
+  - 理由：Lipper 反馈聊天窗口被别的窗口盖住时，`.floating` 覆盖层会画在上层窗口上面。
+  - 影响：D-017 里"覆盖层会画在 KakaoTalk 自己的弹窗上面"这条代价，对层级为 0 的弹窗不再成立。
+  - 日期：2026-10-10
