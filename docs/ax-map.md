@@ -36,8 +36,8 @@
 | 长消息折叠（"전체보기"） | **[推断]** 可能有一个按钮；目前只读 AXTextArea 的可见文本 | 待核对 |
 | 回复 / 引用消息 | 未知 | 待核对 |
 | 虚拟化 | **[观察]** 聊天列表表格包含屏幕外的行（rows > visibleRows）。聊天窗口这次 rows = visibleRows = 8（消息少）。解析器默认只取和消息区可见范围相交的行 | dump |
-| 新消息到达时的通知 | **[观察，不完整]** `tlctl watch` 能挂上观察者，但这次 2 s 里没收到事件；还需在 watch 期间发一条消息实测。App 里同时注册了窗口/表格/应用三级的 AXRowCountChanged、AXCreated、AXValueChanged、AXLayoutChanged、AXSelectedChildrenChanged，另有 1 s 兜底轮询 | 待核对 |
-| 移动 / 缩放 / 切换聊天的通知 | **[推断]** 标准 AXMoved / AXResized / AXFocusedWindowChanged（AppKit 窗口，正常应该会发） | 待核对 |
+| 新消息到达时的通知 | **[观察]** 消息区 AXTable 上的 `AXRowCountChanged`，70 ms 内连发 3 次；防抖后 1 次读取就能拿到新增的那条（diff appended=1）。**滚动聊天记录不发任何通知**，靠 App 的 1 s 兜底轮询（廉价检查）发现可见范围的变化。提示框/弹出层会在应用元素上发 `AXWindowCreated` | `tlctl watch --seconds 90`：AXRowCountChanged=3、AXWindowCreated=3 |
+| 移动 / 缩放 / 最小化的通知 | **[观察]** 拖动窗口：AXWindow 上的 `AXMoved`，约每 100 ms 一次；缩放：`AXResized`，约 60 Hz（2 s 里 111 次）；最小化：`AXFocusedWindowChanged` + `AXMainWindowChanged` + `AXWindowMiniaturized`。侧栏跟随以事件驱动为主 | `tlctl watch --seconds 45`：AXMoved=11、AXResized=111、AXWindowMiniaturized=1 |
 | 单次读取耗时 | **[观察]** 8 行：locate 0.06 ms + parse 1.1–1.3 ms（`tlctl probe --summary`）；合成 205 行：parse p95 ≈ 4 ms（`tlctl bench`） | probe / bench |
 
 ## 与 kmsg 记录的差异（汇总见 D-015）
