@@ -50,8 +50,10 @@ public struct TranslationServiceDiagnostics: Sendable, Equatable {
     public var cacheHits = 0
     /// Segment lookups not in the cache at submit time.
     public var cacheMisses = 0
-    /// Engine calls that threw.
+    /// Engine calls that threw or timed out.
     public var failedCalls = 0
+    /// Engine calls abandoned after `engineTimeout` (also counted in `failedCalls`).
+    public var timeouts = 0
     /// Outcomes yielded (success or error).
     public var outcomes = 0
     /// Current number of cached segments.
@@ -65,6 +67,9 @@ public actor TranslationService {
     public private(set) var target: Locale.Language
     public let batchSize: Int
     public let batchWindowMilliseconds: Int
+    /// Upper bound for one engine call. On timeout its keys leave the in-flight set, the affected messages get
+    /// `.failed("timeout")` and scheduling continues; the abandoned call is cancelled and its result ignored.
+    public nonisolated let engineTimeout: Duration
 
     private var cache: LRUCache<TranslationCacheKey, String>
     /// Keys currently being translated by some engine call (possibly from a cancelled submission).
@@ -72,7 +77,7 @@ public actor TranslationService {
     private var generation: UInt64 = 0
     private var current: Submission?
     private var counters = TranslationServiceDiagnostics()
-    private let logger = Logger(subsystem: "TalkLens", category: "translate")
+    private let logger = Logger(subsystem: TranslateLog.subsystem, category: "translate")
 
     private struct PendingMessage {
         let message: PreprocessedMessage
@@ -96,13 +101,15 @@ public actor TranslationService {
     public init(engine: any TranslationEngine,
                 source: Locale.Language = Locale.Language(identifier: "ko"),
                 target: Locale.Language = Locale.Language(identifier: "zh-Hans"),
-                cacheCapacity: Int = 2000, batchSize: Int = 16, batchWindowMilliseconds: Int = 50) {
+                cacheCapacity: Int = 2000, batchSize: Int = 16, batchWindowMilliseconds: Int = 50,
+                engineTimeout: Duration = .seconds(10)) {
         self.engine = engine
         self.source = source
         self.target = target
         self.cache = LRUCache(capacity: max(1, cacheCapacity))
         self.batchSize = max(1, batchSize)
         self.batchWindowMilliseconds = max(0, batchWindowMilliseconds)
+        self.engineTimeout = engineTimeout > .zero ? engineTimeout : .seconds(10)
     }
 
     /// Changing the target cancels pending work. The cache key includes the target, so no flush is needed.
@@ -277,7 +284,7 @@ public actor TranslationService {
         let stopwatch = Stopwatch()
         // Unstructured on purpose: cancelling the driver must not abort an engine call already started.
         let call = Task { try await engine.translate(items, source: source, target: target) }
-        let result = await call.result
+        let result = await Self.result(of: call, timeout: engineTimeout)
         for k in keys { inFlight.remove(k) }
 
         var successes: [TranslationCacheKey: String] = [:]
@@ -298,6 +305,7 @@ public actor TranslationService {
         case .failure(let error):
             counters.failedCalls += 1
             failure = Self.engineError(error)
+            if failure == Self.timeoutError { counters.timeouts += 1 }
             failed = Set(keys)
         }
         logger.debug("batch items=\(items.count, privacy: .public) failed=\(failed.count, privacy: .public) ms=\(stopwatch.elapsedMilliseconds, privacy: .public)")
@@ -348,10 +356,54 @@ public actor TranslationService {
         continuation.yield(outcome)
     }
 
+    static let timeoutError = TranslationEngineError.failed("timeout")
+
+    /// Waits for `call` at most `timeout`. On timeout the call is cancelled (cooperatively) and abandoned:
+    /// its eventual result is dropped and `.failure(timeoutError)` is returned right away.
+    static func result<T: Sendable>(of call: Task<T, any Error>, timeout: Duration) async -> Result<T, any Error> {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Result<T, any Error>, Never>) in
+            let once = ResumeOnce(continuation)
+            let timer = Task {
+                do { try await Task.sleep(for: timeout) } catch { return }
+                if once.resume(.failure(timeoutError)) { call.cancel() }
+            }
+            Task {
+                let r = await call.result
+                if once.resume(r) { timer.cancel() }
+            }
+        }
+    }
+
     static func engineError(_ error: any Error) -> TranslationEngineError {
         if let e = error as? TranslationEngineError { return e }
         if error is CancellationError { return .cancelled }
         let ns = error as NSError
         return .failed("\(ns.domain)#\(ns.code)")
     }
+}
+
+/// Resumes a continuation exactly once, from whichever racer gets there first.
+private final class ResumeOnce<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Never>?
+
+    init(_ continuation: CheckedContinuation<T, Never>) {
+        self.continuation = continuation
+    }
+
+    /// True when this call resumed the continuation; false when someone else already had.
+    @discardableResult
+    func resume(_ value: T) -> Bool {
+        let c: CheckedContinuation<T, Never>? = lock.withLock {
+            defer { continuation = nil }
+            return continuation
+        }
+        c?.resume(returning: value)
+        return c != nil
+    }
+}
+
+/// os.Logger subsystem shared with TalkLensApp.
+enum TranslateLog {
+    static let subsystem = "dev.lipper.TalkLens"
 }

@@ -125,6 +125,36 @@ import Testing
         #expect(r.assemble(translations: ["only one"]) == nil)
     }
 
+    @Test func segmentsWithoutHangulSyllablesAreKept() {
+        // A jamo-only line inside a multi-line message.
+        let laugh = run("오늘 회의 끝났어요\nㅋㅋㅋ")
+        #expect(laugh.kind == .translate)
+        #expect(laugh.segments == [.translate("오늘 회의 끝났어요"), .keep("\n"), .keep("ㅋㅋㅋ")])
+        #expect(laugh.translatableTexts == ["오늘 회의 끝났어요"])
+        #expect(laugh.assemble(translations: ["T"]) == "T\nㅋㅋㅋ")
+        // A number-only line.
+        let number = run("계좌번호 알려드릴게요\n12345")
+        #expect(number.segments == [.translate("계좌번호 알려드릴게요"), .keep("\n"), .keep("12345")])
+        // Emoji after a URL.
+        let emoji = run("자료 링크입니다 https://example.com/a 🙏")
+        #expect(emoji.translatableTexts == ["자료 링크입니다"])
+        #expect(emoji.segments.last == .keep("🙏"))
+        #expect(emoji.assemble(translations: ["T"]) == "T https://example.com/a 🙏")
+        // English-only line.
+        let english = run("내일 발표 자료입니다\nSee slide 3")
+        #expect(english.translatableTexts == ["내일 발표 자료입니다"])
+        #expect(english.textForMT == "내일 발표 자료입니다\nSee slide 3")
+    }
+
+    @Test func keptSegmentsStillGetChipsAndExpansionDecidesFirst() {
+        // "ㅋㅋㅋ" is kept verbatim but its glossary chip is still shown.
+        let laugh = run("오늘 회의 끝났어요\nㅋㅋㅋ")
+        #expect(laugh.chips.contains { $0.term.hasPrefix("ㅋ") })
+        // "ㅇㅋ" expands to Hangul ("오케이"), so that line is still sent to MT.
+        let ok = run("자료 확인했습니다\nㅇㅋ")
+        #expect(ok.translatableTexts == ["자료 확인했습니다", "오케이"])
+    }
+
     @Test func expandIsAppliedBeforeMT() {
         let r = run("자료 ㄱㅅ합니다 ㄱㄱ")
         #expect(r.kind == .translate)

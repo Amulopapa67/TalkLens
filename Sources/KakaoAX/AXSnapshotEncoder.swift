@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Turns any AXNodeLike subtree into a RecordedAXNode (for `tlctl record`), applying a text transform to every
-// string attribute and bounding depth and node count. The transform is how redaction is enforced.
+// string attribute (including AXIdentifier) and bounding depth and node count. The transform is how redaction
+// is enforced.
 
 import CoreGraphics
 import Foundation
 import TalkLensCore
 
-/// String attributes that can carry user-visible text.
+/// String attributes that can carry user-visible text. `identifier` is usually a developer id ("_NS:29"),
+/// but nothing guarantees that, so it goes through the same transform.
 public enum AXTextAttribute: String, Sendable, CaseIterable {
-    case title, value, description, help
+    case title, value, description, help, identifier
 }
 
 public struct AXSnapshotEncoder {
@@ -52,7 +54,7 @@ public struct AXSnapshotEncoder {
         return RecordedAXNode(
             role: node.role,
             subrole: node.subrole,
-            identifier: node.identifier,
+            identifier: node.identifier.flatMap { transform(.identifier, $0) },
             title: node.title.flatMap { transform(.title, $0) },
             value: node.value.flatMap { transform(.value, $0) },
             nodeDescription: node.nodeDescription.flatMap { transform(.description, $0) },
@@ -103,7 +105,22 @@ public enum RecordPolicy: Equatable, Sendable {
             // The self-chat's title (the owner's nickname) is replaced wherever it appears verbatim.
             return text == title ? RecordPolicy.selfChatPlaceholder : text
         case .redacted:
+            if attribute == .identifier, RecordPolicy.isStructuralIdentifier(text) { return text }
             return Redactor.redact(text)
         }
     }
+
+    /// Developer identifiers that carry no user content and that the locator / chat-window heuristics rely on:
+    /// AppKit's "_NS:<n>", table column ids, KakaoTalk's "Count Label", main-window navigation ids.
+    public static func isStructuralIdentifier(_ id: String) -> Bool {
+        if structuralIdentifiers.contains(id) { return true }
+        for prefix in ["_NS:", "AutomaticTableColumnIdentifier."] where id.hasPrefix(prefix) {
+            let rest = id.dropFirst(prefix.count)
+            return !rest.isEmpty && rest.allSatisfy { $0.isASCII && $0.isNumber }
+        }
+        return false
+    }
+
+    static let structuralIdentifiers: Set<String> =
+        KakaoChatReader.mainWindowNavigationIdentifiers.union(["Main Window", "Count Label"])
 }

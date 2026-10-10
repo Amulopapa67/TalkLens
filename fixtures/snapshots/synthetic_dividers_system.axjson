@@ -49,7 +49,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "김민준",
+                        "description" : "합성A",
                         "frame" : [
                           576,
                           371,
@@ -62,11 +62,11 @@
                         "frame" : [
                           626,
                           371,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "김민준"
+                        "value" : "합성A"
                       },
                       {
                         "frame" : [
@@ -122,13 +122,13 @@
                     "children" : [
                       {
                         "frame" : [
-                          680,
+                          683,
                           448,
-                          152,
+                          146,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "박서연님이 들어왔습니다."
+                        "value" : "합성B님이 들어왔습니다."
                       }
                     ],
                     "frame" : [
@@ -154,7 +154,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "박서연",
+                        "description" : "합성B",
                         "frame" : [
                           576,
                           484,
@@ -167,11 +167,11 @@
                         "frame" : [
                           626,
                           484,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "박서연"
+                        "value" : "합성B"
                       },
                       {
                         "frame" : [
@@ -259,7 +259,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "이도윤",
+                        "description" : "합성C",
                         "frame" : [
                           576,
                           597,
@@ -272,11 +272,11 @@
                         "frame" : [
                           626,
                           597,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "이도윤"
+                        "value" : "합성C"
                       },
                       {
                         "frame" : [
@@ -333,13 +333,13 @@
                     "children" : [
                       {
                         "frame" : [
-                          687,
+                          689,
                           658,
-                          139,
+                          134,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "이도윤님이 나갔습니다."
+                        "value" : "합성C님이 나갔습니다."
                       }
                     ],
                     "frame" : [
@@ -452,7 +452,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "김민준",
+                        "description" : "합성A",
                         "frame" : [
                           576,
                           771,
@@ -465,11 +465,11 @@
                         "frame" : [
                           626,
                           771,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "김민준"
+                        "value" : "합성A"
                       },
                       {
                         "frame" : [

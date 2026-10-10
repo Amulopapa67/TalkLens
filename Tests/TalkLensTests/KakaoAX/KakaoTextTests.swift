@@ -16,7 +16,7 @@ struct KakaoTextTests {
 
     @Test("non-time tokens")
     func nonTimeTokens() {
-        for s in ["김민준", "12345", "2026. 10. 10.", "25:61", "오후"] {
+        for s in ["합성A", "12345", "2026. 10. 10.", "25:61", "오후"] {
             #expect(KakaoText.extractTimeToken(from: s) == nil)
         }
     }
@@ -54,7 +54,7 @@ struct KakaoTextTests {
         #expect(KakaoText.parseDividerDate("2026-10-10", referenceYear: 2000) == "2026-10-10")
         #expect(KakaoText.parseDividerDate("10/15 (수) 연구실 대청소 있습니다", referenceYear: 2026) == nil)
         #expect(KakaoText.parseDividerDate("과제 2 마감이 10월 20일 23:59까지로", referenceYear: 2026) == nil)
-        #expect(KakaoText.parseDividerDate("박서연님이 들어왔습니다.", referenceYear: 2026) == nil)
+        #expect(KakaoText.parseDividerDate("합성B님이 들어왔습니다.", referenceYear: 2026) == nil)
     }
 
     @Test("attachment and count tokens")
@@ -63,7 +63,7 @@ struct KakaoTextTests {
         #expect(!KakaoText.isCountToken("1a"))
         #expect(KakaoText.isFileNameToken("과제2_보고서.pdf"))
         #expect(KakaoText.isAttachmentMetadataToken("유효기간 ~ 2026. 10. 24. · 용량 1.2MB"))
-        #expect(!KakaoText.isAttachmentMetadataToken("김민준"))
+        #expect(!KakaoText.isAttachmentMetadataToken("합성A"))
         #expect(KakaoText.isAttachmentButtonTitle("저장"))
         #expect(KakaoText.isSystemMetadataToken("2026-10-10"))
         #expect(KakaoText.countURLTokens(in: "a https://x.y/1 b http://z.w") == 2)

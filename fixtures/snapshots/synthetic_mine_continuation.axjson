@@ -15,7 +15,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "박서연",
+                        "description" : "합성B",
                         "frame" : [
                           576,
                           412,
@@ -28,11 +28,11 @@
                         "frame" : [
                           626,
                           412,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "박서연"
+                        "value" : "합성B"
                       },
                       {
                         "frame" : [
@@ -236,7 +236,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "박서연",
+                        "description" : "합성B",
                         "frame" : [
                           576,
                           586,
@@ -249,11 +249,11 @@
                         "frame" : [
                           626,
                           586,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "박서연"
+                        "value" : "합성B"
                       },
                       {
                         "frame" : [

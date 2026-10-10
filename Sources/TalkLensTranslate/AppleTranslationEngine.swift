@@ -148,7 +148,7 @@ actor AppleSessionStore {
     private let preferLowLatency: Bool
     private var session: TranslationSession?
     private var pair: (source: String, target: String)?
-    private let logger = Logger(subsystem: "TalkLens", category: "apple-engine")
+    private let logger = Logger(subsystem: TranslateLog.subsystem, category: "apple-engine")
 
     init(preferLowLatency: Bool) {
         self.preferLowLatency = preferLowLatency

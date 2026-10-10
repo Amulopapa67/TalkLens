@@ -53,7 +53,7 @@ struct DevToolsTests {
         let mine = try #require(msgs.first { $0["isMine"] as? Bool == true })
         #expect(mine["author"] is NSNull)
         let first = msgs[0]
-        #expect(first["author"] as? String == "김민준")
+        #expect(first["author"] as? String == "합성A")
         #expect((first["translation"] as? String)?.hasPrefix("[mock→zh-Hans] ") == true)
         // System rows are not translated.
         let sys = try ReplayRenderer.render(name: "s", file: try Fixture.load("synthetic_dividers_system"), glossary: .empty) { $0 }
@@ -97,5 +97,23 @@ struct DevToolsTests {
         #expect(throws: KakaoReadError.transcriptNotFound) {
             try KakaoChatReader.read(windowNode: RecordedAXNode(role: AXRole.window), parser: parser)
         }
+    }
+
+    @Test("probe tags: keyed per run, 6 hex chars, not the plain short SHA-256")
+    func runScopedTags() {
+        let a = RunScopedTagger()
+        let b = RunScopedTagger()
+        let names = ["합성A", "합성B", "합성C", "합성D", "합성E", "합성F"]
+        for n in names {
+            let t = a.tag(n)
+            #expect(t.count == 6 && t.allSatisfy { $0.isHexDigit })
+            #expect(t == a.tag(n))                          // stable within a run
+            #expect(t != Redactor.shortHash(n))             // not dictionary-reversible via plain SHA-256
+        }
+        // Different random keys give different tags (6 names: a full collision is ~2^-144).
+        #expect(names.map(a.tag) != names.map(b.tag))
+        // A fixed key is deterministic (HMAC-SHA256 test vector prefix, RFC 4231 case 2).
+        let fixed = RunScopedTagger(key: Data("Jefe".utf8))
+        #expect(fixed.tag("what do ya want for nothing?") == "5bdcc1")
     }
 }

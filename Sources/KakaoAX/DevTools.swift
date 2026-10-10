@@ -1,9 +1,36 @@
 // SPDX-License-Identifier: MIT
 // Pure helpers behind the tlctl developer CLI (kept here so they are unit-testable): argument parsing,
-// replay rendering (snapshot → parse → identity → preprocess → mock translation → JSON) and golden diffs.
+// replay rendering (snapshot → parse → identity → preprocess → mock translation → JSON), golden diffs and
+// run-scoped correlation tags.
 
+import CryptoKit
 import Foundation
 import TalkLensCore
+
+// MARK: - Correlation tags
+
+/// Short correlation tags for live CLI output (`tlctl probe`): HMAC-SHA256 under a random key that lives only
+/// for this process, truncated to 6 hex chars. Equal inputs get equal tags within one run, but a tag cannot be
+/// reversed by hashing a dictionary of likely names (unlike a plain SHA-256 prefix) and does not correlate
+/// across runs. The key is never printed or stored.
+public struct RunScopedTagger: Sendable {
+    private let key: SymmetricKey
+
+    /// Fresh random 256-bit key.
+    public init() {
+        key = SymmetricKey(size: .bits256)
+    }
+
+    /// Fixed key (tests only).
+    init(key: Data) {
+        self.key = SymmetricKey(data: key)
+    }
+
+    public func tag(_ text: String) -> String {
+        let mac = HMAC<SHA256>.authenticationCode(for: Data(text.utf8), using: key)
+        return mac.prefix(3).map { String(format: "%02x", $0) }.joined()
+    }
+}
 
 // MARK: - Arguments
 

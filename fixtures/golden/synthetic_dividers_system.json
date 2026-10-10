@@ -26,7 +26,7 @@
         "images" : 0,
         "links" : 0
       },
-      "author" : "김민준",
+      "author" : "합성A",
       "body" : "오늘 3교시 휴강입니다. 보강 일정은 추후 공지하겠습니다.",
       "chips" : [
         {
@@ -43,7 +43,7 @@
         }
       ],
       "date" : "2026-10-09",
-      "id" : "f18f24745b4a29e0",
+      "id" : "10f62a5615ff73d6",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -58,12 +58,12 @@
         "links" : 0
       },
       "author" : null,
-      "body" : "박서연님이 들어왔습니다.",
+      "body" : "합성B님이 들어왔습니다.",
       "chips" : [
 
       ],
       "date" : "2026-10-09",
-      "id" : "1d7517c61c5671df",
+      "id" : "254c18955c5c4444",
       "isMine" : false,
       "isSystem" : true,
       "kind" : "system",
@@ -77,7 +77,7 @@
         "images" : 0,
         "links" : 0
       },
-      "author" : "박서연",
+      "author" : "합성B",
       "body" : "조교입니다. 질문은 수업 게시판에 올려주시면 답변드리겠습니다.",
       "chips" : [
         {
@@ -86,7 +86,7 @@
         }
       ],
       "date" : "2026-10-09",
-      "id" : "c46a0e7e4b02e508",
+      "id" : "be097bc424ce382f",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -120,7 +120,7 @@
         "images" : 0,
         "links" : 0
       },
-      "author" : "이도윤",
+      "author" : "합성C",
       "body" : "출석 체크는 KLMS에서 해주세요.",
       "chips" : [
         {
@@ -133,7 +133,7 @@
         }
       ],
       "date" : "2026-10-10",
-      "id" : "213c564cf0abd583",
+      "id" : "bcf83d71d28b0cc5",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -148,12 +148,12 @@
         "links" : 0
       },
       "author" : null,
-      "body" : "이도윤님이 나갔습니다.",
+      "body" : "합성C님이 나갔습니다.",
       "chips" : [
 
       ],
       "date" : "2026-10-10",
-      "id" : "a8ceb492a6669a21",
+      "id" : "4bd3fcad98f7dfbf",
       "isMine" : false,
       "isSystem" : true,
       "kind" : "system",
@@ -214,7 +214,7 @@
         "images" : 0,
         "links" : 0
       },
-      "author" : "김민준",
+      "author" : "합성A",
       "body" : "중간고사 범위는 1장부터 6장까지입니다.",
       "chips" : [
         {
@@ -223,7 +223,7 @@
         }
       ],
       "date" : "2026-10-11",
-      "id" : "7d5ed382101ad38f",
+      "id" : "a1e3a1bf9c276f0e",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",

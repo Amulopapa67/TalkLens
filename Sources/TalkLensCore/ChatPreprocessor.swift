@@ -42,6 +42,11 @@ public struct ChatPreprocessor: Sendable {
         switch kind {
         case .translate:
             let segments = makeSegments(normalized)
+            // Defensive: every translate-classified message has a Hangul syllable outside URLs/mentions, so at
+            // least one segment is sent; if not, there is nothing to translate.
+            guard segments.contains(where: { if case .translate = $0 { return true } else { return false } }) else {
+                return result(message, .alreadyTarget, chips: chips)
+            }
             let textForMT = segments.map { seg -> String in
                 switch seg {
                 case .keep(let s), .translate(let s): return s
@@ -233,7 +238,8 @@ public struct ChatPreprocessor: Sendable {
     static let protectedRegex = CompiledRegex(
         #"(?:https?://|www\.)[^\s]+|(?<![\w@])@[^\s,.!?:;()\[\]{}"'<>]+"#, options: [.caseInsensitive])
 
-    /// Splits `text` into keep (URLs, mentions, line breaks, surrounding whitespace) and translate pieces,
+    /// Splits `text` into keep (URLs, mentions, line breaks, surrounding whitespace, runs without any Hangul
+    /// syllable) and translate pieces,
     /// applies glossary `expand` to translate pieces, and splits long pieces at sentence boundaries.
     func makeSegments(_ text: String) -> [MTSegment] {
         var out: [MTSegment] = []
@@ -271,7 +277,17 @@ public struct ChatPreprocessor: Sendable {
         let trailing = String(piece.reversed().prefix { $0.isWhitespace }.reversed())
         if !leading.isEmpty { out.append(.keep(String(leading))) }
         let expanded = glossaryEnabled ? glossary.expandInline(core) : core
-        out.append(contentsOf: splitLong(expanded))
+        if TextScan.containsHangulSyllable(expanded) {
+            // Chunks of a long run that happen to carry no Hangul syllable are kept as well.
+            out.append(contentsOf: splitLong(expanded).map { seg in
+                if case .translate(let t) = seg, !TextScan.containsHangulSyllable(t) { return .keep(t) }
+                return seg
+            })
+        } else {
+            // Nothing for a ko→X engine to do ("ㅋㅋㅋ", "12345", emoji, an English line): shown verbatim.
+            // Decided after `expand`, so an abbreviation that expands to Hangul ("ㅇㅋ" → "오케이") is still sent.
+            out.append(.keep(core))
+        }
         if !trailing.isEmpty { out.append(.keep(trailing)) }
     }
 

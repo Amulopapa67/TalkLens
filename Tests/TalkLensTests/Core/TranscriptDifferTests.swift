@@ -115,4 +115,26 @@ import Testing
         let stats = LatencyStats(samples)
         #expect(stats.p95 < 5, "diff p95 \(stats.summary)")
     }
+
+    // MARK: order-only changes
+
+    @Test func orderOnlyChangeIsAChange() {
+        let d = TranscriptDiffer.diff(old: ids("a b c"), new: ids("a c b"))
+        #expect(d.appended.isEmpty && d.prepended.isEmpty && d.removed.isEmpty && !d.isReset)
+        #expect(d.isReordered)
+        #expect(d.hasChanges)
+    }
+
+    @Test func plainScrollIsNotReordered() {
+        let d = TranscriptDiffer.diff(old: ids("a b c"), new: ids("b c d"))
+        #expect(!d.isReordered)
+        let same = TranscriptDiffer.diff(old: ids("a b c"), new: ids("a b c"))
+        #expect(!same.isReordered && !same.hasChanges)
+    }
+
+    @Test func reorderAlongsideOtherChangesIsFlagged() {
+        let d = TranscriptDiffer.diff(old: ids("a b c"), new: ids("b a c d"))
+        #expect(d.isReordered)
+        #expect(d.appended == ids("d"))
+    }
 }
