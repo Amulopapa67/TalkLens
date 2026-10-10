@@ -77,6 +77,8 @@ public final class TranscriptRowCache<Node: IncrementalAXNode>: @unchecked Senda
     var rootRole: String?
     var table: Node?
     var input: Node?
+    /// The chat window has no message input (read-only channel); `input` stays nil.
+    var inputless = false
     /// Transcript viewport width the cached analyses were made with.
     var analysisWidth: CGFloat?
     var entries: [Node.Identity: Entry] = [:]
@@ -114,6 +116,7 @@ public final class TranscriptRowCache<Node: IncrementalAXNode>: @unchecked Senda
         rootRole = nil
         table = nil
         input = nil
+        inputless = false
         lastTable = nil
     }
 
@@ -159,12 +162,13 @@ extension KakaoChatReader {
         var rootNow: Node
         var tableNow: Node
         var inputFrame: CGRect?
+        let cachedInput = cache.input?.refreshed()
         if let root = cache.root?.refreshed(), let role = root.role, role == cache.rootRole,
            let table = cache.table?.refreshed(), table.role == AXRole.table,
-           let inputNode = cache.input?.refreshed(), let inputNodeFrame = inputNode.frame {
+           cache.inputless || cachedInput?.frame != nil {
             rootNow = root
             tableNow = table
-            inputFrame = inputNodeFrame
+            inputFrame = cache.inputless ? nil : cachedInput?.frame
         } else {
             cache.clearLocation()
             guard let loc = TranscriptLocator.locate(inWindow: window) else { throw KakaoReadError.transcriptNotFound }
@@ -180,6 +184,7 @@ extension KakaoChatReader {
             cache.rootRole = loc.transcriptRoot.role
             cache.table = table
             cache.input = loc.input
+            cache.inputless = loc.input == nil
         }
         let viewport = rootNow.frame
         let tableFrame = tableNow.frame

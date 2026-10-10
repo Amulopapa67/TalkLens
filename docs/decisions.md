@@ -116,3 +116,9 @@
     4. `isMainWindow` 的搜索从 400 节点降到 40 节点（导航按钮是直接子节点，已核实）。
   - 测试：原增量读取测试改用"不限范围和预算"的缓存，继续覆盖缓存机制；新增 5 个预算/范围测试。
   - 日期：2026-10-10
+- **D-021 没有输入框的聊天窗口（商业账号 / 通知频道）**
+  - 观察（26.8.0）：
+    - 카카오톡 채널 这类只读聊天没有输入框，原来输入框的位置是一行 AXStaticText 提示，所以 TranscriptLocator 认不出窗口，整窗不翻译。
+    - 消息结构：`AXCell → [AXButton 头像 36×36, AXStaticText 时间(help=日期), AXStaticText 发送者, AXStaticText 卡片标题, AXTextArea 正文, AXImage 卡片图标]`。正文外面没有包住它的气泡 AXImage。
+  - 决定：找不到输入框时，退回去选"直接包含 AXTable、宽度 ≥ 窗口 60%、高度 ≥ 30% 的最大 AXScrollArea"，`inputFrame = nil`。带 friends/chatrooms/more 导航按钮的主窗口不走这条兜底。增量缓存会记住"这个窗口没有输入框"。
+  - 日期：2026-10-10

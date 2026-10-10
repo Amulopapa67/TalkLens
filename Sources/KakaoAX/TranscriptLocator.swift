@@ -34,10 +34,35 @@ public enum TranscriptLocator {
     public static func locate<Node: AXNodeLike>(inWindow window: Node) -> TranscriptLocation<Node>? {
         let scan = scanWindow(window)
         guard let input = pickInput(scan.inputCandidates, windowFrame: window.frame),
-              let inputFrame = input.frame,
-              let root = pickTranscript(scan.containers, windowFrame: window.frame, inputFrame: inputFrame)
+              let inputFrame = input.frame
+        else {
+            // Read-only chats (e.g. KakaoTalk Channel / business notification accounts) have no message input:
+            // a static notice sits where the input box would be (observed on 26.8.0, D-021).
+            return locateWithoutInput(scan, window: window)
+        }
+        guard let root = pickTranscript(scan.containers, windowFrame: window.frame, inputFrame: inputFrame)
         else { return nil }
         return TranscriptLocation(transcriptRoot: root, inputFrame: inputFrame, windowFrame: window.frame, input: input)
+    }
+
+    /// Transcript of a chat window without an input box: the largest scroll area that directly contains a
+    /// table and covers most of the window's width and a good part of its height.
+    static func locateWithoutInput<Node: AXNodeLike>(_ scan: Scan<Node>, window: Node) -> TranscriptLocation<Node>? {
+        guard let windowFrame = window.frame, windowFrame.width > 0, windowFrame.height > 0 else { return nil }
+        // The main window (friends / chat list) also has a large scroll area with a table and no input.
+        if window.children.contains(where: {
+            $0.identifier.map(KakaoChatReader.mainWindowNavigationIdentifiers.contains) ?? false
+        }) { return nil }
+        var best: (node: Node, area: CGFloat)?
+        for c in scan.containers where c.role == AXRole.scrollArea {
+            guard let f = c.frame, f.width >= windowFrame.width * 0.6, f.height >= windowFrame.height * 0.3,
+                  c.children.prefix(childBonusSampleSize).contains(where: { $0.role == AXRole.table })
+            else { continue }
+            let area = f.width * f.height
+            if best == nil || area > best!.area { best = (c, area) }
+        }
+        guard let root = best?.node else { return nil }
+        return TranscriptLocation(transcriptRoot: root, inputFrame: nil, windowFrame: windowFrame, input: nil)
     }
 
     // MARK: - Scan
