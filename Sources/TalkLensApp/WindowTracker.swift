@@ -108,6 +108,10 @@ final class WindowTracker: AXEventSink {
     private var readPending = false
     private var readDirty = false
     private var probeInFlight = false
+    private var dragTrackingTask: Task<Void, Never>?
+    private var dragLastChange: ContinuousClock.Instant = .now
+    static let dragSampleInterval: Duration = .milliseconds(16)
+    static let dragQuietPeriod: Duration = .milliseconds(300)
     private var geometryInFlight = false
     private var geometryPending = false
     private var geometryPendingStopwatch: Stopwatch?
@@ -144,7 +148,8 @@ final class WindowTracker: AXEventSink {
         let center = NSWorkspace.shared.notificationCenter
         for token in workspaceTokens { center.removeObserver(token) }
         workspaceTokens.removeAll()
-        for task in [debounceTask, pollTask, permissionTask, delayedRefreshTask, windowCheckTask, retryTask] {
+        for task in [debounceTask, pollTask, permissionTask, delayedRefreshTask, windowCheckTask, retryTask,
+                     dragTrackingTask] {
             task?.cancel()
         }
         debounceTask = nil
@@ -244,6 +249,7 @@ final class WindowTracker: AXEventSink {
         retryTask = nil
         observation?.invalidate()
         observation = nil
+        stopDragTracking()
         observedWindow = nil
         transcriptTable = nil
         inputInsets = nil
@@ -289,6 +295,7 @@ final class WindowTracker: AXEventSink {
         switch name {
         case "AXMoved", "AXResized":
             geometryChanged(stopwatch: Stopwatch())
+            startDragTracking()
         case "AXWindowMiniaturized":
             geometry.minimized = true
             geometry.stopwatch = nil
@@ -342,6 +349,30 @@ final class WindowTracker: AXEventSink {
         }
     }
 
+    // MARK: - Drag tracking
+
+    /// KakaoTalk posts AXMoved only about every 100 ms while a window is dragged, which makes the panel move
+    /// in visible steps. After any move/resize event, sample the frame at display rate (one cheap
+    /// position/size read per tick, coalesced by `geometryChanged`) until it has been still for a moment.
+    private func startDragTracking() {
+        dragLastChange = .now
+        guard dragTrackingTask == nil else { return }
+        dragTrackingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.dragSampleInterval, tolerance: .milliseconds(4))
+                guard let self, !Task.isCancelled else { return }
+                if ContinuousClock.now - self.dragLastChange > Self.dragQuietPeriod { break }
+                self.geometryChanged(stopwatch: nil)
+            }
+            self?.dragTrackingTask = nil
+        }
+    }
+
+    private func stopDragTracking() {
+        dragTrackingTask?.cancel()
+        dragTrackingTask = nil
+    }
+
     private func applyGeometry(_ g: WindowGeometry, stopwatch: Stopwatch?) {
         var next = geometry
         next.minimized = g.minimized
@@ -355,6 +386,7 @@ final class WindowTracker: AXEventSink {
            next.minimized == geometry.minimized {
             return
         }
+        if next.windowAX != geometry.windowAX { dragLastChange = .now }
         geometry = next
         onGeometry?(geometry)
     }
