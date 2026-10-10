@@ -39,6 +39,14 @@ final class Diagnostics {
     var readStats: LatencyStats { LatencyStats(readSamples) }
     var ingestStats: LatencyStats { LatencyStats(ingestSamples) }
 
+    /// One numbers-only line for `log show` (durations in ms and counts; no content).
+    var summaryLine: String {
+        func f(_ s: LatencyStats) -> String { String(format: "n=%d p50=%.1f p95=%.1f", s.count, s.p50, s.p95) }
+        return "stats translation[\(f(translationStats))] follow[\(f(followStats))] read[\(f(readStats))] "
+            + "ingest[\(f(ingestStats))] reads=\(readCount) readFailures=\(readFailureCount) "
+            + "axEvents=\(axEventCount) pollReads=\(pollReadCount)"
+    }
+
     private func append(_ samples: inout [Double], _ value: Double) {
         samples.append(value)
         if samples.count > Diagnostics.sampleCap {

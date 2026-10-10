@@ -27,6 +27,7 @@ final class AppController {
     private(set) var panel: PanelController?
     private var onboardingModel: OnboardingModel?
     private var screenObserver: NSObjectProtocol?
+    private var statsTask: Task<Void, Never>?
 
     init(settings: AppSettings = AppSettings(defaults: .standard),
          engine: any TranslationEngine = AppleTranslationEngine()) {
@@ -72,9 +73,24 @@ final class AppController {
             self.maybeShowOnboarding()
         }
         logger.info("started glossary=\(self.glossaryStore.merged.entries.count)")
+        startStatsLogging()
+    }
+
+    /// Every 30 s, log the in-memory timing summary (numbers only) so PERF.md can be filled from `log show`.
+    private func startStatsLogging() {
+        statsTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30), tolerance: .seconds(5))
+                guard !Task.isCancelled, let self else { return }
+                let line = self.diagnostics.summaryLine
+                logger.info("\(line, privacy: .public)")
+            }
+        }
     }
 
     func stop() {
+        statsTask?.cancel()
+        statsTask = nil
         tracker.stop()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
