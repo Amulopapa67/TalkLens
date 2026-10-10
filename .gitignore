@@ -11,3 +11,4 @@ DerivedData/
 kakao_ax_dump*.json
 _to_delete/
 dist/
+.claude/worktrees/

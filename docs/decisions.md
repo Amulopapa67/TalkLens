@@ -24,3 +24,26 @@
   - 决定：不回溯历史，翻译范围由可见集合驱动。
   - 理由：AX 列表可能虚拟化；只读约束下也不能主动滚动。
   - 日期：2026-10-10
+- **D-008 单一测试 target + CLT 下的 swift-testing 路径**
+  - 决定：所有测试放在一个 test target `TalkLensTests`（子目录 Core / KakaoAX / Translate）。Package.swift 在检测到 `/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing` 时，给测试 target 加 `-plugin-path` 和 Testing.framework 的 rpath。
+  - 理由：本机只有 Command Line Tools，默认构建系统找不到 `TestingMacros` 插件和 `Testing.framework`，`@Test` 无法展开。另外 swift-testing 每个测试 bundle 各打印一行 `Test run with N tests`，verify.sh G3 取的是最大值而不是总和，分成多个 target 会少算。合成一个 target 后不需要改 verify.sh。
+  - 代价：`unsafeFlags` 只对根包有效（本项目就是根包，没问题）；装了 Xcode 的机器上这个分支不生效。
+  - 日期：2026-10-10
+- **D-009 `.axjson` 的 root 是整个聊天窗口子树**
+  - 决定：fixture 的 `root` 存聊天窗口（AXWindow）整棵子树，而不只是 transcript 的 AXScrollArea。
+  - 理由：这样 TranscriptLocator（找输入框和消息区）也能在 replay 和单测里跑到，回归覆盖更完整。
+  - 代价：文件更大；录制时要限制深度和节点数（≤ 40 层、≤ 8000 节点）。
+  - 日期：2026-10-10
+- **D-010 用"切段翻译 + 拼接"保护 URL 和 @提及，不用占位符**
+  - 决定：ChatPreprocessor 把消息切成 `MTSegment`：URL、`@提及`、换行是 `.keep`，其余是 `.translate`；长段按句切到 ≤ 1000 字。只翻 `.translate` 段，再按原顺序拼回。
+  - 理由：架构草案里的占位符方案要先实测 Apple 翻译能否原样保留占位符，现在翻译语言还没装，没法测；切段方案不依赖引擎行为，更稳。
+  - 代价：句子被 URL 截断时，两边分开翻，语序可能略生硬。
+  - 日期：2026-10-10
+- **D-011 KakaoAX 依赖 TalkLensCore**
+  - 决定：KakaoAX 的解析器直接产出 TalkLensCore 的 `ParsedMessage`。
+  - 理由：避免再定义一套中间模型；TalkLensCore 是纯 Foundation，不会把 AppKit 带进来。
+  - 日期：2026-10-10
+- **D-012 self-chat 录制不保存真实窗口标题**
+  - 决定：`tlctl record` 只有在标题命中 `.lens-dev.json` 白名单时才保留原文，此时 `meta.source = "self-chat"`，`window.title` 一律写成 `<self-chat>`。没命中时全部脱敏，`meta.source = "redacted-live"`，这类文件不能放进 fixtures/snapshots。
+  - 理由：나와의 채팅 的标题是 Lipper 的昵称，fixtures 会进开源仓库。
+  - 日期：2026-10-10

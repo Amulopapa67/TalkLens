@@ -1,0 +1,49 @@
+# CI: build, unit/replay tests and guards on a macOS runner. Live items (probe, selftest with Apple
+# Translation, app signing with a stable identity) are not run here — see docs/LIVE_CHECKLIST.md.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          swift --version
+
+      - name: Read-only / offline guard
+        run: scripts/guard_readonly.sh
+
+      - name: Privacy heuristic (informational)
+        run: scripts/guard_readonly.sh --privacy
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Tests
+        run: swift test
+
+      - name: Replay fixtures against golden
+        run: .build/release/tlctl replay fixtures/snapshots --engine mock --golden fixtures/golden
+
+      - name: Parse / diff benchmark
+        run: .build/release/tlctl bench fixtures/snapshots
+
+      - name: Selftest with mock engine
+        run: .build/release/tlctl selftest --engine mock --source ko --target zh-Hans --input fixtures/test_messages_ko.txt
+
+      - name: App bundle (ad-hoc signed)
+        run: |
+          scripts/build_app.sh
+          codesign --verify --strict build/TalkLens.app
