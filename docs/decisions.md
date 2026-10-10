@@ -62,3 +62,16 @@
     - 面板需要精细控制 level 和 collectionBehavior。
   - 面板 collectionBehavior = `[.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]`：切到 KakaoTalk 所在 Space（含全屏）时面板已在；KakaoTalk 不在前台时隐藏，所以不会留在别的 Space。
   - 日期：2026-10-10
+- **D-014 kmsg vendor 清单（@54cbff7）**
+  - 派生文件（每个文件前 5 行都有署名头）：`Sources/KakaoAX/{AXConstants,AXErrorDescription,AccessibilityPermission,AXTreeSearch,KakaoText,LiveAXNode,TranscriptLocator,TranscriptParser,KakaoProcess}.swift`。
+  - 去掉的内容：所有 action / activate / focus / launch / 写盘缓存的路径，`activateFileViewerSelecting`，AXActionRunner 依赖。
+  - 自写（SPDX 头）：RecordedAXNode、AXSnapshotEncoder、KakaoChatReader、AXNotificationObserver、DevTools、AXNodeLike。
+  - 日期：2026-10-10
+- **D-015 根据真机结构调整 kmsg 的解析规则（KakaoTalk 26.8.0）**
+  - 气泡背景是包住 AXTextArea 的 AXImage，不算图片附件。
+  - 时间标签只出现在同一分钟一组消息的最后一条上，所以时间和日期从下一条带标签的同侧消息**往回**填，kmsg 的往前延续只作为兜底。
+  - 判断"我发的"先看气泡右缘是否贴近消息区右缘，比例阈值只作兜底：长气泡的中点比例约 0.6，落在 kmsg 的不确定区间里。
+  - 日期分隔是一个没有文字的 AXButton，跳过。
+  - 英文界面下 AXHelp 日期是美式短日期 `10/10/26`（M/D/YY），时间是 `6:01 PM`（窄不换行空格）。
+  - 解析器默认只取与消息区可见范围相交的行（屏幕外的行也在 AX 树里）。bench 按全部行算，即最坏情况。
+  - 日期：2026-10-10

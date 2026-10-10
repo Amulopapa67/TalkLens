@@ -12,7 +12,7 @@
 
       ],
       "date" : "2026-10-09",
-      "id" : "0f49a20afef6253f",
+      "id" : "dde34172149b52c4",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -29,10 +29,13 @@
       "author" : null,
       "body" : "아 그거 제가 착각했네요 ㅎㅎ 죄송합니다",
       "chips" : [
-
+        {
+          "gloss" : "呵呵/嘿嘿（轻笑）",
+          "term" : "ㅎㅎ"
+        }
       ],
       "date" : "2026-10-09",
-      "id" : "d99d3a798c751eba",
+      "id" : "9ed3d3f85f3caf25",
       "isMine" : true,
       "isSystem" : false,
       "kind" : "translate",
@@ -52,7 +55,7 @@
 
       ],
       "date" : "2026-10-09",
-      "id" : "77e2fb2fc130a63d",
+      "id" : "5b91004514fc0224",
       "isMine" : true,
       "isSystem" : false,
       "kind" : "translate",
@@ -72,13 +75,13 @@
 
       ],
       "date" : "2026-10-09",
-      "id" : "31ccbaaf21f037f0",
+      "id" : "a44124b8e0f2ba66",
       "isMine" : true,
       "isSystem" : false,
-      "kind" : "translate",
+      "kind" : "alreadyTarget",
       "note" : null,
       "timeRaw" : "오전 10:05",
-      "translation" : "[mock→zh-Hans] 好的，我知道了"
+      "translation" : null
     },
     {
       "attachments" : {
@@ -89,10 +92,21 @@
       "author" : "박서연",
       "body" : "헐 대박 ㄷㄷ",
       "chips" : [
-
+        {
+          "gloss" : "天哪 / 啊？",
+          "term" : "헐"
+        },
+        {
+          "gloss" : "太厉害了 / 离谱",
+          "term" : "대박"
+        },
+        {
+          "gloss" : "（发抖）吓人/厉害",
+          "term" : "ㄷㄷ"
+        }
       ],
       "date" : "2026-10-09",
-      "id" : "d1a443391f8fe30a",
+      "id" : "0b6c4d88c97d1c12",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -112,13 +126,13 @@
 
       ],
       "date" : "2026-10-09",
-      "id" : "76a2a70b15622cd0",
+      "id" : "da785e2cf5e53bf3",
       "isMine" : false,
       "isSystem" : false,
-      "kind" : "translate",
+      "kind" : "emojiOnly",
       "note" : null,
       "timeRaw" : "오전 10:07",
-      "translation" : "[mock→zh-Hans] 😂😂"
+      "translation" : null
     },
     {
       "attachments" : {
@@ -132,13 +146,13 @@
 
       ],
       "date" : "2026-10-09",
-      "id" : "77f34799f91653e4",
+      "id" : "5d6bcf86fb3d583c",
       "isMine" : false,
       "isSystem" : false,
-      "kind" : "translate",
+      "kind" : "numberOrTimeOnly",
       "note" : null,
       "timeRaw" : "오전 10:07",
-      "translation" : "[mock→zh-Hans] 12345"
+      "translation" : null
     },
     {
       "attachments" : {
@@ -149,16 +163,19 @@
       "author" : "박서연",
       "body" : "ㅋㅋㅋㅋ",
       "chips" : [
-
+        {
+          "gloss" : "哈哈（笑）",
+          "term" : "ㅋㅋ"
+        }
       ],
       "date" : "2026-10-09",
-      "id" : "12e22751befd2fe1",
+      "id" : "a2962bd3fc9d1ff0",
       "isMine" : false,
       "isSystem" : false,
-      "kind" : "translate",
-      "note" : null,
+      "kind" : "jamoOnly",
+      "note" : "哈哈（笑）",
       "timeRaw" : "오전 10:09",
-      "translation" : "[mock→zh-Hans] ㅋㅋㅋㅋ"
+      "translation" : null
     },
     {
       "attachments" : {
@@ -169,16 +186,19 @@
       "author" : "박서연",
       "body" : "ㅋㅋㅋㅋ",
       "chips" : [
-
+        {
+          "gloss" : "哈哈（笑）",
+          "term" : "ㅋㅋ"
+        }
       ],
       "date" : "2026-10-09",
-      "id" : "12e22751befd2fe1#1",
+      "id" : "a2962bd3fc9d1ff0#1",
       "isMine" : false,
       "isSystem" : false,
-      "kind" : "translate",
-      "note" : null,
+      "kind" : "jamoOnly",
+      "note" : "哈哈（笑）",
       "timeRaw" : "오전 10:09",
-      "translation" : "[mock→zh-Hans] ㅋㅋㅋㅋ"
+      "translation" : null
     },
     {
       "attachments" : {
@@ -192,7 +212,7 @@
 
       ],
       "date" : "2026-10-09",
-      "id" : "7ff6f845df215482",
+      "id" : "61c1882b790fd3dc",
       "isMine" : true,
       "isSystem" : false,
       "kind" : "translate",

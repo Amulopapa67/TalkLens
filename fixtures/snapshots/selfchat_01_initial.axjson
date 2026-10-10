@@ -1,0 +1,598 @@
+{
+  "meta" : {
+    "kakaoVersion" : "26.8.0",
+    "macOS" : "27.2.0",
+    "recordedAt" : "2026-10-10T09:10:57Z",
+    "source" : "self-chat"
+  },
+  "root" : {
+    "children" : [
+      {
+        "children" : [
+          {
+            "children" : [
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "description" : "",
+                        "frame" : [
+                          669,
+                          299,
+                          200,
+                          28
+                        ],
+                        "role" : "AXButton",
+                        "title" : ""
+                      }
+                    ],
+                    "frame" : [
+                      579,
+                      290,
+                      380,
+                      36
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  579,
+                  290,
+                  380,
+                  36
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          663,
+                          336,
+                          286,
+                          31
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          668,
+                          344,
+                          273,
+                          16
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "내일 랩미팅은 오후 2시에서 4시로 변경되었습니다."
+                      }
+                    ],
+                    "frame" : [
+                      579,
+                      326,
+                      380,
+                      41
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  579,
+                  326,
+                  380,
+                  41
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          657,
+                          372,
+                          292,
+                          47
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          662,
+                          380,
+                          279,
+                          32
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "교수님께서 이번 주 금요일 세미나는 온라인으로 진행한다고 하셨어요."
+                      }
+                    ],
+                    "frame" : [
+                      579,
+                      367,
+                      380,
+                      52
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  579,
+                  367,
+                  380,
+                  52
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          664,
+                          424,
+                          285,
+                          95
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          669,
+                          432,
+                          272,
+                          80
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "안녕하세요 여러분,\n다음 주 월요일부터 실험실 출입 카드가 새로 발급됩니다.\n기존 카드는 금요일까지 행정실에 반납해 주세요.\n문의는 저에게 개인 톡 주세요."
+                      }
+                    ],
+                    "frame" : [
+                      579,
+                      419,
+                      380,
+                      100
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  579,
+                  419,
+                  380,
+                  100
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          662,
+                          524,
+                          287,
+                          47
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          667,
+                          532,
+                          274,
+                          32
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "과제 2 마감이 10월 20일 23:59까지로 연장되었습니다."
+                      }
+                    ],
+                    "frame" : [
+                      579,
+                      519,
+                      380,
+                      52
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  579,
+                  519,
+                  380,
+                  52
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          830,
+                          592,
+                          43,
+                          16
+                        ],
+                        "help" : "10/10/26",
+                        "role" : "AXStaticText",
+                        "value" : "6:01 PM"
+                      },
+                      {
+                        "frame" : [
+                          877,
+                          576,
+                          72,
+                          31
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          882,
+                          584,
+                          59,
+                          16
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "ㅇㅋ ㄱㄱ"
+                      }
+                    ],
+                    "frame" : [
+                      579,
+                      571,
+                      380,
+                      36
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  579,
+                  571,
+                  380,
+                  36
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "frame" : [
+                          839.5,
+                          633,
+                          44.5,
+                          16
+                        ],
+                        "help" : "10/10/26",
+                        "role" : "AXStaticText",
+                        "value" : "6:02 PM"
+                      },
+                      {
+                        "frame" : [
+                          888,
+                          617,
+                          61,
+                          31
+                        ],
+                        "role" : "AXImage"
+                      },
+                      {
+                        "frame" : [
+                          893,
+                          625,
+                          48,
+                          16
+                        ],
+                        "role" : "AXTextArea",
+                        "value" : "😂😂"
+                      }
+                    ],
+                    "frame" : [
+                      579,
+                      607,
+                      380,
+                      41
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  579,
+                  607,
+                  380,
+                  41
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "children" : [
+                  {
+                    "frame" : [
+                      579,
+                      648,
+                      380,
+                      15
+                    ],
+                    "role" : "AXCell"
+                  }
+                ],
+                "frame" : [
+                  579,
+                  648,
+                  380,
+                  15
+                ],
+                "role" : "AXRow",
+                "subrole" : "AXTableRow"
+              },
+              {
+                "frame" : [
+                  579,
+                  290,
+                  380,
+                  432
+                ],
+                "identifier" : "AutomaticTableColumnIdentifier.0",
+                "role" : "AXColumn"
+              }
+            ],
+            "frame" : [
+              578,
+              289,
+              382,
+              434
+            ],
+            "identifier" : "_NS:33",
+            "role" : "AXTable"
+          }
+        ],
+        "frame" : [
+          579,
+          290,
+          380,
+          432
+        ],
+        "identifier" : "_NS:29",
+        "role" : "AXScrollArea"
+      },
+      {
+        "description" : "Profile",
+        "frame" : [
+          593,
+          240,
+          40,
+          40
+        ],
+        "identifier" : "_NS:164",
+        "role" : "AXButton"
+      },
+      {
+        "frame" : [
+          644,
+          249.5,
+          45.5,
+          21
+        ],
+        "help" : "<self-chat>",
+        "identifier" : "_NS:144",
+        "role" : "AXStaticText",
+        "value" : "<self-chat>"
+      },
+      {
+        "description" : "Search",
+        "frame" : [
+          862,
+          245,
+          32,
+          32
+        ],
+        "help" : "Search ⌘F",
+        "identifier" : "_NS:10",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "Chatroom Archives",
+        "frame" : [
+          892,
+          245,
+          32,
+          32
+        ],
+        "identifier" : "_NS:54",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "Menu",
+        "frame" : [
+          922,
+          245,
+          32,
+          32
+        ],
+        "identifier" : "_NS:78",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "children" : [
+          {
+            "frame" : [
+              933,
+              208,
+              16,
+              16
+            ],
+            "role" : "AXValueIndicator"
+          }
+        ],
+        "frame" : [
+          888,
+          207,
+          62,
+          18
+        ],
+        "identifier" : "_NS:182",
+        "role" : "AXSlider"
+      },
+      {
+        "children" : [
+          {
+            "description" : "Enter a message",
+            "frame" : [
+              589,
+              733,
+              370,
+              65
+            ],
+            "identifier" : "_NS:51",
+            "role" : "AXTextArea",
+            "value" : ""
+          }
+        ],
+        "frame" : [
+          589,
+          733,
+          370,
+          65
+        ],
+        "identifier" : "_NS:47",
+        "role" : "AXScrollArea"
+      },
+      {
+        "description" : "",
+        "frame" : [
+          588,
+          807,
+          26,
+          26
+        ],
+        "help" : "More Features",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "",
+        "frame" : [
+          620,
+          807,
+          26,
+          26
+        ],
+        "help" : "Emoticons ⌘E",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "description" : "",
+        "frame" : [
+          652,
+          807,
+          26,
+          26
+        ],
+        "help" : "Send Files ⌘O",
+        "role" : "AXButton",
+        "title" : ""
+      },
+      {
+        "enabled" : false,
+        "frame" : [
+          890,
+          803,
+          62,
+          32
+        ],
+        "role" : "AXButton",
+        "title" : "Send"
+      },
+      {
+        "description" : "New update badge",
+        "frame" : [
+          640,
+          809,
+          6,
+          6
+        ],
+        "role" : "AXImage"
+      },
+      {
+        "frame" : [
+          587,
+          210,
+          16,
+          16
+        ],
+        "role" : "AXButton",
+        "subrole" : "AXCloseButton"
+      },
+      {
+        "children" : [
+          {
+            "frame" : [
+              634,
+              211,
+              14,
+              14
+            ],
+            "role" : "AXGroup"
+          }
+        ],
+        "frame" : [
+          633,
+          210,
+          16,
+          16
+        ],
+        "help" : "this button also has an action to zoom the window",
+        "role" : "AXButton",
+        "subrole" : "AXFullScreenButton"
+      },
+      {
+        "frame" : [
+          610,
+          210,
+          16,
+          16
+        ],
+        "role" : "AXButton",
+        "subrole" : "AXMinimizeButton"
+      }
+    ],
+    "frame" : [
+      579,
+      202,
+      380,
+      640
+    ],
+    "identifier" : "_NS:443",
+    "role" : "AXWindow",
+    "subrole" : "AXStandardWindow",
+    "title" : "<self-chat>"
+  },
+  "window" : {
+    "frame" : [
+      579,
+      202,
+      380,
+      640
+    ],
+    "title" : "<self-chat>"
+  }
+}

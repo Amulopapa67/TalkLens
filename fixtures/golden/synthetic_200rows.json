@@ -9,10 +9,13 @@
       "author" : null,
       "body" : "중간고사 범위는 1장부터 6장까지입니다.",
       "chips" : [
-
+        {
+          "gloss" : "期中考试",
+          "term" : "중간고사"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "9415dda01abf26a6",
+      "id" : "f953f44c3382c51f",
       "isMine" : true,
       "isSystem" : false,
       "kind" : "translate",
@@ -29,10 +32,17 @@
       "author" : "박서연",
       "body" : "출석 체크는 KLMS에서 해주세요.",
       "chips" : [
-
+        {
+          "gloss" : "考勤 / 签到",
+          "term" : "출석"
+        },
+        {
+          "gloss" : "KAIST 课程平台（LMS）",
+          "term" : "KLMS"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "8760a92b5dc1bd71",
+      "id" : "9305ed48abd16625",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -49,10 +59,13 @@
       "author" : null,
       "body" : "내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.",
       "chips" : [
-
+        {
+          "gloss" : "组会",
+          "term" : "랩미팅"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "94e8bb9eb10c5a4f",
+      "id" : "ab6866ed53a33fdd",
       "isMine" : true,
       "isSystem" : false,
       "kind" : "translate",
@@ -69,10 +82,13 @@
       "author" : "박서연",
       "body" : "중간고사 범위는 1장부터 6장까지입니다.",
       "chips" : [
-
+        {
+          "gloss" : "期中考试",
+          "term" : "중간고사"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "c479d0c4587cfb5b",
+      "id" : "d75d2fa9bc160b1f",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -89,10 +105,17 @@
       "author" : "최지우",
       "body" : "출석 체크는 KLMS에서 해주세요.",
       "chips" : [
-
+        {
+          "gloss" : "考勤 / 签到",
+          "term" : "출석"
+        },
+        {
+          "gloss" : "KAIST 课程平台（LMS）",
+          "term" : "KLMS"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "2b515ae14f3c6d65",
+      "id" : "fdc7cc7cf1686342",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -109,16 +132,19 @@
       "author" : "박서연",
       "body" : "내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.\n(198)",
       "chips" : [
-
+        {
+          "gloss" : "组会",
+          "term" : "랩미팅"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "a62f6f17aaee6b1c",
+      "id" : "2e194dddd9b430c2",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
       "note" : null,
       "timeRaw" : "오전 9:16",
-      "translation" : "[mock→zh-Hans] 내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.\n(198)"
+      "translation" : "[mock→zh-Hans] 내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.\n[mock→zh-Hans] (198)"
     },
     {
       "attachments" : {
@@ -129,10 +155,13 @@
       "author" : "최지우",
       "body" : "중간고사 범위는 1장부터 6장까지입니다.",
       "chips" : [
-
+        {
+          "gloss" : "期中考试",
+          "term" : "중간고사"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "e670af1ed0094e59",
+      "id" : "02850a6d218a5861",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",

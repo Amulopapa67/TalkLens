@@ -1,0 +1,161 @@
+{
+  "messages" : [
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.",
+      "chips" : [
+        {
+          "gloss" : "组会",
+          "term" : "랩미팅"
+        }
+      ],
+      "date" : "2026-10-10",
+      "id" : "e14f490138b5b51a",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "6:01 PM",
+      "translation" : "[mock→zh-Hans] 내일 랩미팅은 오후 2시에서 4시로 변경되었습니다."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "교수님께서 이번 주 금요일 세미나는 온라인으로 진행한다고 하셨어요.",
+      "chips" : [
+        {
+          "gloss" : "教授（敬称）",
+          "term" : "교수님"
+        },
+        {
+          "gloss" : "研讨会 / 讲座",
+          "term" : "세미나"
+        }
+      ],
+      "date" : "2026-10-10",
+      "id" : "ec6a12909c3ac0bd",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "6:01 PM",
+      "translation" : "[mock→zh-Hans] 교수님께서 이번 주 금요일 세미나는 온라인으로 진행한다고 하셨어요."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "안녕하세요 여러분,\n다음 주 월요일부터 실험실 출입 카드가 새로 발급됩니다.\n기존 카드는 금요일까지 행정실에 반납해 주세요.\n문의는 저에게 개인 톡 주세요.",
+      "chips" : [
+        {
+          "gloss" : "门禁卡",
+          "term" : "출입 카드"
+        },
+        {
+          "gloss" : "行政办公室",
+          "term" : "행정실"
+        },
+        {
+          "gloss" : "私信（单聊）",
+          "term" : "개인 톡"
+        }
+      ],
+      "date" : "2026-10-10",
+      "id" : "c6a4a759c8eb4496",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "6:01 PM",
+      "translation" : "[mock→zh-Hans] 안녕하세요 여러분,\n[mock→zh-Hans] 다음 주 월요일부터 실험실 출입 카드가 새로 발급됩니다.\n[mock→zh-Hans] 기존 카드는 금요일까지 행정실에 반납해 주세요.\n[mock→zh-Hans] 문의는 저에게 개인 톡 주세요."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "과제 2 마감이 10월 20일 23:59까지로 연장되었습니다.",
+      "chips" : [
+        {
+          "gloss" : "作业",
+          "term" : "과제"
+        },
+        {
+          "gloss" : "截止",
+          "term" : "마감"
+        }
+      ],
+      "date" : "2026-10-10",
+      "id" : "c0bd971f64e06d4c",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "translate",
+      "note" : null,
+      "timeRaw" : "6:01 PM",
+      "translation" : "[mock→zh-Hans] 과제 2 마감이 10월 20일 23:59까지로 연장되었습니다."
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "ㅇㅋ ㄱㄱ",
+      "chips" : [
+        {
+          "gloss" : "OK",
+          "term" : "ㅇㅋ"
+        },
+        {
+          "gloss" : "走起 / 开始吧",
+          "term" : "ㄱㄱ"
+        }
+      ],
+      "date" : "2026-10-10",
+      "id" : "692ad1501f5718e4",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "jamoOnly",
+      "note" : "OK · 走起 / 开始吧",
+      "timeRaw" : "6:01 PM",
+      "translation" : null
+    },
+    {
+      "attachments" : {
+        "files" : 0,
+        "images" : 0,
+        "links" : 0
+      },
+      "author" : null,
+      "body" : "😂😂",
+      "chips" : [
+
+      ],
+      "date" : "2026-10-10",
+      "id" : "c9b33a051ea4a69c",
+      "isMine" : true,
+      "isSystem" : false,
+      "kind" : "emojiOnly",
+      "note" : null,
+      "timeRaw" : "6:02 PM",
+      "translation" : null
+    }
+  ],
+  "snapshot" : "selfchat_01_initial",
+  "source" : "self-chat"
+}

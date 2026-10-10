@@ -72,6 +72,7 @@ public enum TimeLabelParser {
 
     /// AXHelp tooltip ("2026. 6. 2." or "2026-06-02") → "2026-06-02".
     public static func parseHelpDate(_ text: String) -> String? {
+        if let iso = parseShortNumericDate(text.trimmingCharacters(in: .whitespacesAndNewlines)) { return iso }
         guard let m = ymdSearch.firstMatch(in: text) else { return nil }
         return iso(m, text, yearGroup: 1, monthGroup: 2, dayGroup: 3, referenceYear: nil)
     }
@@ -93,6 +94,21 @@ public enum TimeLabelParser {
             return TextScan.isoDate(year: year, month: month, day: day)
         }
         return nil
+    }
+
+    /// Whole-string US short date "M/D/YY" or "M/D/YYYY" (KakaoTalk's English UI AXHelp, e.g. "10/10/26")
+    /// → "YYYY-MM-DD". Two-digit years are 20YY. When the first number cannot be a month but the second can,
+    /// the string is read as D/M/Y instead.
+    public static func parseShortNumericDate(_ text: String) -> String? {
+        let parts = text.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isASCII) && $0.allSatisfy(\.isNumber) }),
+              parts[0].count <= 2, parts[1].count <= 2, parts[2].count == 2 || parts[2].count == 4,
+              var month = Int(parts[0]), var day = Int(parts[1]), var year = Int(parts[2])
+        else { return nil }
+        if year < 100 { year += 2000 }
+        if month > 12 && day <= 12 { swap(&month, &day) }
+        return TextScan.isoDate(year: year, month: month, day: day)
     }
 
     // MARK: - Helpers

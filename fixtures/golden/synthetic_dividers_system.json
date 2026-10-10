@@ -12,7 +12,7 @@
 
       ],
       "date" : "2026-10-09",
-      "id" : "78deedbef2aee47c",
+      "id" : "38695b4046be7cfa",
       "isMine" : false,
       "isSystem" : true,
       "kind" : "system",
@@ -29,10 +29,21 @@
       "author" : "김민준",
       "body" : "오늘 3교시 휴강입니다. 보강 일정은 추후 공지하겠습니다.",
       "chips" : [
-
+        {
+          "gloss" : "停课",
+          "term" : "휴강"
+        },
+        {
+          "gloss" : "补课",
+          "term" : "보강"
+        },
+        {
+          "gloss" : "另行通知",
+          "term" : "추후 공지"
+        }
       ],
       "date" : "2026-10-09",
-      "id" : "1ff90c1969ac543e",
+      "id" : "f18f24745b4a29e0",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -52,7 +63,7 @@
 
       ],
       "date" : "2026-10-09",
-      "id" : "cb10f9bddd3cc0f4",
+      "id" : "1d7517c61c5671df",
       "isMine" : false,
       "isSystem" : true,
       "kind" : "system",
@@ -69,10 +80,13 @@
       "author" : "박서연",
       "body" : "조교입니다. 질문은 수업 게시판에 올려주시면 답변드리겠습니다.",
       "chips" : [
-
+        {
+          "gloss" : "助教（TA）",
+          "term" : "조교"
+        }
       ],
       "date" : "2026-10-09",
-      "id" : "413a72249a7991b6",
+      "id" : "c46a0e7e4b02e508",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -92,7 +106,7 @@
 
       ],
       "date" : "2026-10-10",
-      "id" : "0e8286de194eed2d",
+      "id" : "ac2bd3ad022c1fa2",
       "isMine" : false,
       "isSystem" : true,
       "kind" : "system",
@@ -109,10 +123,17 @@
       "author" : "이도윤",
       "body" : "출석 체크는 KLMS에서 해주세요.",
       "chips" : [
-
+        {
+          "gloss" : "考勤 / 签到",
+          "term" : "출석"
+        },
+        {
+          "gloss" : "KAIST 课程平台（LMS）",
+          "term" : "KLMS"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "db4d8894e600f403",
+      "id" : "213c564cf0abd583",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -132,7 +153,7 @@
 
       ],
       "date" : "2026-10-10",
-      "id" : "4abbb2cdc57ed447",
+      "id" : "a8ceb492a6669a21",
       "isMine" : false,
       "isSystem" : true,
       "kind" : "system",
@@ -149,10 +170,17 @@
       "author" : null,
       "body" : "10/15 (수) 연구실 대청소 있습니다",
       "chips" : [
-
+        {
+          "gloss" : "实验室",
+          "term" : "연구실"
+        },
+        {
+          "gloss" : "大扫除",
+          "term" : "대청소"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "52de776f515468c6",
+      "id" : "e0b02f8f1d8aae98",
       "isMine" : true,
       "isSystem" : false,
       "kind" : "translate",
@@ -172,7 +200,7 @@
 
       ],
       "date" : "2026-10-11",
-      "id" : "c5a6121a1046a879",
+      "id" : "e936c30a24d9a3db",
       "isMine" : false,
       "isSystem" : true,
       "kind" : "system",
@@ -189,10 +217,13 @@
       "author" : "김민준",
       "body" : "중간고사 범위는 1장부터 6장까지입니다.",
       "chips" : [
-
+        {
+          "gloss" : "期中考试",
+          "term" : "중간고사"
+        }
       ],
       "date" : "2026-10-11",
-      "id" : "785775550d369b35",
+      "id" : "7d5ed382101ad38f",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",

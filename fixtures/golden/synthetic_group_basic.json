@@ -9,10 +9,13 @@
       "author" : "김민준",
       "body" : "내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.",
       "chips" : [
-
+        {
+          "gloss" : "组会",
+          "term" : "랩미팅"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "bf574908bee79599",
+      "id" : "ef1968f4b0ab6ae0",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -29,10 +32,17 @@
       "author" : "김민준",
       "body" : "교수님께서 이번 주 금요일 세미나는 온라인으로 진행한다고 하셨어요.",
       "chips" : [
-
+        {
+          "gloss" : "教授（敬称）",
+          "term" : "교수님"
+        },
+        {
+          "gloss" : "研讨会 / 讲座",
+          "term" : "세미나"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "7dc4cdb1bf8b3aef",
+      "id" : "e7d57a2fae9705b8",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -52,7 +62,7 @@
 
       ],
       "date" : "2026-10-10",
-      "id" : "c22ffcff2dfce69c",
+      "id" : "80ac1cb0112205c5",
       "isMine" : true,
       "isSystem" : false,
       "kind" : "translate",
@@ -69,16 +79,19 @@
       "author" : "박서연",
       "body" : "ㅋㅋㅋㅋ",
       "chips" : [
-
+        {
+          "gloss" : "哈哈（笑）",
+          "term" : "ㅋㅋ"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "6121bbbd38bb379c",
+      "id" : "9ee14ebd06c5d218",
       "isMine" : false,
       "isSystem" : false,
-      "kind" : "translate",
-      "note" : null,
+      "kind" : "jamoOnly",
+      "note" : "哈哈（笑）",
       "timeRaw" : "오후 3:14",
-      "translation" : "[mock→zh-Hans] ㅋㅋㅋㅋ"
+      "translation" : null
     },
     {
       "attachments" : {
@@ -89,16 +102,23 @@
       "author" : "이도윤",
       "body" : "ㅇㅋ ㄱㄱ",
       "chips" : [
-
+        {
+          "gloss" : "OK",
+          "term" : "ㅇㅋ"
+        },
+        {
+          "gloss" : "走起 / 开始吧",
+          "term" : "ㄱㄱ"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "8c4734b15ba77a82",
+      "id" : "50aa9ef6ce3d157f",
       "isMine" : false,
       "isSystem" : false,
-      "kind" : "translate",
-      "note" : null,
+      "kind" : "jamoOnly",
+      "note" : "OK · 走起 / 开始吧",
       "timeRaw" : "오후 3:14",
-      "translation" : "[mock→zh-Hans] ㅇㅋ ㄱㄱ"
+      "translation" : null
     },
     {
       "attachments" : {
@@ -109,10 +129,13 @@
       "author" : "이도윤",
       "body" : "수고하셨습니다~",
       "chips" : [
-
+        {
+          "gloss" : "辛苦了（结束时的礼貌用语）",
+          "term" : "수고하셨습니다"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "660179a6f5ba4eec",
+      "id" : "985ddd9434d35ab6",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -129,10 +152,13 @@
       "author" : null,
       "body" : "오늘 점심 학식 vs 배달?",
       "chips" : [
-
+        {
+          "gloss" : "学校食堂",
+          "term" : "학식"
+        }
       ],
       "date" : "2026-10-10",
-      "id" : "b4698b313050dec1",
+      "id" : "3dc8e8f436c493c2",
       "isMine" : true,
       "isSystem" : false,
       "kind" : "translate",

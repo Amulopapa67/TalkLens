@@ -5,6 +5,7 @@
 // TimeLabelParser (the two may diverge; KakaoAX only needs what KakaoTalk's AX tree actually shows).
 
 import Foundation
+import TalkLensCore
 
 public enum KakaoText {
     private static func re(_ pattern: String) -> NSRegularExpression {
@@ -101,10 +102,11 @@ public enum KakaoText {
 
     /// AXHelp tooltip of a time label ("2026. 6. 2.", "2026-06-02", "2026년 6월 2일", "2026/6/2") → "2026-06-02".
     /// With `referenceYear`, year-less forms ("6월 2일", "6. 2.", "06/02") are accepted too.
-    /// (KakaoTalk 26.8.0 shows an 8-character tooltip whose exact format is not verified yet.)
+    /// KakaoTalk 26.8.0 with an English UI shows the US short date "10/10/26" (M/D/YY) — verified on a self-chat recording.
     public static func parseHelpDate(_ text: String, referenceYear: Int? = nil) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 3, trimmed.first?.isNumber == true else { return nil }
+        if let iso = TimeLabelParser.parseShortNumericDate(trimmed) { return iso }
         if let referenceYear, trimmed.count < 8 || !trimmed.prefix(4).allSatisfy(\.isNumber) {
             for regex in [helpKoreanNoYear, helpDottedNoYear, helpSlashedNoYear] {
                 if let m = firstMatch(regex, in: trimmed),
