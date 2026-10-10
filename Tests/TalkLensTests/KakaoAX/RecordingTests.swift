@@ -50,7 +50,7 @@ struct RecordingTests {
         #expect(policy == .redacted)
         let result = AXSnapshotEncoder { policy.transform($0, $1) }.encode(file.root)
         let json = String(decoding: try JSONEncoder().encode(result.root), as: UTF8.self)
-        for needle in ["박서연", "김민준", "이도윤", "합성 연구실", "안녕하세요", "린루이", "카드"] {
+        for needle in ["합성B", "합성A", "합성C", "합성 연구실", "안녕하세요", "린루이", "카드"] {
             #expect(!json.contains(needle), "leaked \(needle)")
         }
         #expect(result.nodeCount == file.root.nodeCount)
@@ -89,5 +89,31 @@ struct RecordingTests {
         let r = RecordPolicy.redacted
         #expect(r.source == "redacted-live" && !r.storesRawText)
         #expect(r.transform(.value, "넵 알겠습니다!") != "넵 알겠습니다!")
+    }
+
+    @Test("identifiers go through the transform hook; structural ids survive redaction")
+    func identifierTransform() throws {
+        let leaf = RecordedAXNode(role: AXRole.staticText, identifier: "합성A 프로필", value: "x")
+        let window = RecordedAXNode(role: AXRole.window, identifier: "_NS:443", children: [
+            RecordedAXNode(role: AXRole.column, identifier: "AutomaticTableColumnIdentifier.0"),
+            RecordedAXNode(role: AXRole.staticText, identifier: "Count Label", value: "1"),
+            RecordedAXNode(role: AXRole.button, identifier: "chatrooms"),
+            leaf,
+        ])
+        var seen: [AXTextAttribute] = []
+        _ = AXSnapshotEncoder { attr, text in seen.append(attr); return text }.encode(window)
+        #expect(seen.filter { $0 == .identifier }.count == 5)
+
+        let redacted = AXSnapshotEncoder { RecordPolicy.redacted.transform($0, $1) }.encode(window).root
+        #expect(redacted.identifier == "_NS:443")
+        #expect(redacted.children.map(\.identifier) == ["AutomaticTableColumnIdentifier.0", "Count Label", "chatrooms",
+                                                        "<text len=7 ko>"])
+        let json = String(decoding: try JSONEncoder().encode(redacted), as: UTF8.self)
+        #expect(!json.contains("합성A"))
+
+        // Self-chat: identifiers are kept, except a verbatim title.
+        let selfChat = RecordPolicy.selfChat(title: "합성A 프로필")
+        #expect(selfChat.transform(.identifier, "_NS:51") == "_NS:51")
+        #expect(selfChat.transform(.identifier, "합성A 프로필") == "<self-chat>")
     }
 }

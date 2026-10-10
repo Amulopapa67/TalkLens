@@ -13,17 +13,28 @@ actor CallRecorder {
     var count: Int { calls.count }
 }
 
-/// Deterministic engine for scheduler tests: "<target>" + text, optional delay, injectable failures.
+/// Holds hanging engine calls until released (so a test can clean up after itself).
+actor HangGate {
+    private(set) var released = false
+    func release() { released = true }
+}
+
+/// Deterministic engine for scheduler tests: "<target>" + text, optional delay, injectable failures and hangs.
 struct ScriptedEngine: TranslationEngine {
     let id: String
     let recorder = CallRecorder()
+    let gate = HangGate()
     let delay: Duration
     let failingTexts: Set<String>
+    /// Batches containing one of these texts never return (ignoring cancellation) until `gate` is released.
+    let hangingTexts: Set<String>
 
-    init(id: String = "scripted", delay: Duration = .zero, failingTexts: Set<String> = []) {
+    init(id: String = "scripted", delay: Duration = .zero, failingTexts: Set<String> = [],
+         hangingTexts: Set<String> = []) {
         self.id = id
         self.delay = delay
         self.failingTexts = failingTexts
+        self.hangingTexts = hangingTexts
     }
 
     func status(source: Locale.Language, target: Locale.Language) async -> EngineStatus { .ready }
@@ -31,6 +42,10 @@ struct ScriptedEngine: TranslationEngine {
     func translate(_ items: [TranslationItem], source: Locale.Language,
                    target: Locale.Language) async throws -> [TranslationResult] {
         await recorder.record(items.map(\.text))
+        if items.contains(where: { hangingTexts.contains($0.text) }) {
+            while !(await gate.released) { try? await Task.sleep(for: .milliseconds(10)) }
+            throw TranslationEngineError.failed("released")
+        }
         if delay > .zero {
             // Ignore cancellation on purpose: mimics an engine call that runs to completion.
             let deadline = ContinuousClock.now + delay

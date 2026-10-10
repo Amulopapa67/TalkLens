@@ -1,4 +1,4 @@
-// Derived from kmsg (https://github.com/channprj/kmsg) @54cbff7 — MIT License, Copyright (c) 2026 Park Hee Chan. Modifications: row analysis of TranscriptReader.swift rewritten generic over AXNodeLike and deterministic (no Date(), explicit reference year); rows collected by one budgeted BFS and filtered to the visible transcript area; avatars may be AXImage or AXButton; author taken from the static text above the body; time/date resolved forward within a same-sender group before kmsg's per-side carry-over; system rows (centered notices, date dividers) kept with isSystem; image/file-only rows kept; truncated URLs replaced in place by the AXLink title; removed AXActionRunner logging, the text-area fallback scan and the message limit/dedup logic.
+// Derived from kmsg (https://github.com/channprj/kmsg) @54cbff7 — MIT License, Copyright (c) 2026 Park Hee Chan. Modifications: row analysis of TranscriptReader.swift rewritten generic over AXNodeLike and deterministic (no Date(), explicit reference year); rows collected by one budgeted BFS and filtered to the visible transcript area, with up to 20 off-screen context rows per side analysed but not emitted; avatars may be AXImage or AXButton; author taken from the static text above the body; time/date resolved forward within a same-sender group before kmsg's per-side carry-over; system rows (centered notices, date dividers) kept with isSystem; image/file-only rows kept; truncated URLs replaced in place by the AXLink title; removed AXActionRunner logging, the text-area fallback scan and the message limit/dedup logic.
 // SPDX-License-Identifier: MIT
 
 import CoreGraphics
@@ -8,11 +8,18 @@ import TalkLensCore
 public struct TranscriptParser: Sendable {
     /// Year used when a date divider omits it (defaults to the current year).
     public var referenceYear: Int
-    /// Upper bound on rows analysed (most recent rows win).
+    /// Upper bound on emitted rows (most recent rows win); context rows come on top of this.
     public var maxRows: Int
-    /// Only rows whose frame intersects the transcript container's frame (what is on screen).
-    /// KakaoTalk keeps off-screen rows in the AX tree; set false to analyse every row (bench worst case).
+    /// Only emit rows whose frame intersects the transcript container's frame (what is on screen).
+    /// KakaoTalk keeps off-screen rows in the AX tree; set false to emit every row above the input (bench worst
+    /// case). Either way, up to `contextRows` rows on each side of the emitted range are analysed as context.
     public var visibleOnly: Bool
+
+    /// Rows above and below the emitted range that are analysed but not emitted. They carry what a visible row
+    /// cannot show by itself: the group head's author (avatar + name), the group-last time label and its AXHelp
+    /// date, and date dividers. So a message keeps the same author/time/date (and therefore MessageID)
+    /// whether or not its group head or time label is scrolled into view.
+    public static let contextRows = 20
 
     public init(referenceYear: Int = Calendar(identifier: .gregorian).component(.year, from: Date()),
                 maxRows: Int = 400, visibleOnly: Bool = true) {
@@ -30,8 +37,21 @@ public struct TranscriptParser: Sendable {
     public func parse<Node: AXNodeLike>(transcriptRoot: Node, inputFrame: CGRect?) -> [ParsedMessage] {
         let transcriptFrame = transcriptRoot.frame
         let rows = collectRows(transcriptRoot: transcriptRoot, transcriptFrame: transcriptFrame, inputFrame: inputFrame)
-        let analyses = rows.compactMap { analyzeRow($0.node, rowFrame: $0.frame, transcriptFrame: transcriptFrame) }
-        return assemble(analyses)
+        var analyses: [RowAnalysis] = []
+        var emit: [Bool] = []
+        analyses.reserveCapacity(rows.count)
+        emit.reserveCapacity(rows.count)
+        for r in rows {
+            guard let a = analyzeRow(r.node, rowFrame: r.frame, transcriptFrame: transcriptFrame) else { continue }
+            analyses.append(a)
+            emit.append(r.emit)
+        }
+        // Assemble over context + emitted rows (one message per analysis, in order), then drop the context.
+        let assembled = assemble(analyses)
+        var out: [ParsedMessage] = []
+        out.reserveCapacity(assembled.count)
+        for (m, keep) in zip(assembled, emit) where keep { out.append(m) }
+        return out
     }
 
     /// Convenience: locate + parse a whole chat window subtree.
@@ -42,14 +62,17 @@ public struct TranscriptParser: Sendable {
 
     // MARK: - Rows
 
-    /// Number of rows this parser would analyse (after the input / visibility filters and `maxRows`).
+    /// Number of rows this parser would analyse: the emitted rows (after the input / visibility filters and
+    /// `maxRows`) plus their context rows.
     public func collectRowCount<Node: AXNodeLike>(transcriptRoot: Node, inputFrame: CGRect?) -> Int {
         collectRows(transcriptRoot: transcriptRoot, transcriptFrame: transcriptRoot.frame, inputFrame: inputFrame).count
     }
 
-    /// AXRow descendants of the root (rows are not descended into), above the input, sorted by y then x.
+    /// AXRow descendants of the root (rows are not descended into), sorted by y then x: the emitted rows (above
+    /// the input; on screen when `visibleOnly`; the last `maxRows` of them) with `emit == true`, plus up to
+    /// `contextRows` neighbours on each side with `emit == false`.
     func collectRows<Node: AXNodeLike>(transcriptRoot: Node, transcriptFrame: CGRect?,
-                                       inputFrame: CGRect?) -> [(node: Node, frame: CGRect?)] {
+                                       inputFrame: CGRect?) -> [(node: Node, frame: CGRect?, emit: Bool)] {
         var rows: [(node: Node, frame: CGRect?, order: Int)] = []
         var queue = [transcriptRoot]
         var index = 0
@@ -66,24 +89,26 @@ public struct TranscriptParser: Sendable {
             if node.role == AXRole.column { continue }
             queue.append(contentsOf: node.children)
         }
-        var filtered = rows
-        if let inputFrame {
-            filtered = filtered.filter { r in r.frame.map { $0.maxY <= inputFrame.minY + 20 } ?? true }
-        }
-        if visibleOnly, let tf = transcriptFrame {
-            filtered = filtered.filter { r in
-                guard let f = r.frame else { return true }
-                return f.intersection(tf).height >= min(4, f.height)
-            }
-        }
-        filtered.sort { a, b in
+        rows.sort { a, b in
             let ay = a.frame?.minY ?? .greatestFiniteMagnitude, by = b.frame?.minY ?? .greatestFiniteMagnitude
             if ay != by { return ay < by }
             let ax = a.frame?.minX ?? .greatestFiniteMagnitude, bx = b.frame?.minX ?? .greatestFiniteMagnitude
             if ax != bx { return ax < bx }
             return a.order < b.order
         }
-        return filtered.suffix(maxRows).map { ($0.node, $0.frame) }
+        let visibleFrame = visibleOnly ? transcriptFrame : nil
+        func isEmitted(_ frame: CGRect?) -> Bool {
+            guard let f = frame else { return true }
+            if let inputFrame, f.maxY > inputFrame.minY + 20 { return false }
+            if let tf = visibleFrame, f.intersection(tf).height < min(4, f.height) { return false }
+            return true
+        }
+        let emitted = rows.indices.filter { isEmitted(rows[$0].frame) }.suffix(maxRows)
+        guard let first = emitted.first, let last = emitted.last else { return [] }
+        let emittedSet = Set(emitted)
+        let lo = max(0, first - TranscriptParser.contextRows)
+        let hi = min(rows.count - 1, last + TranscriptParser.contextRows)
+        return (lo...hi).map { i in (rows[i].node, rows[i].frame, emittedSet.contains(i)) }
     }
 
     // MARK: - Row analysis

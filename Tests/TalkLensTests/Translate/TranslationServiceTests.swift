@@ -168,6 +168,33 @@ struct TranslateServiceTests {
         #expect(await service.diagnostics.failedCalls == 1)
     }
 
+    @Test func hungEngineCallTimesOutAndServiceKeepsWorking() async {
+        let engine = ScriptedEngine(hangingTexts: ["멈춘 문장"])
+        let service = TranslationService(engine: engine, batchSize: 1, batchWindowMilliseconds: 0,
+                                         engineTimeout: .milliseconds(100))
+        let out = await collect(await service.submit([Msg.text("hung", "멈춘 문장"), Msg.text("ok", "정상 문장")]))
+        #expect(out.count == 2)
+        let hung = out.first { $0.id == MessageID("hung") }
+        #expect(hung?.text == nil)
+        #expect(hung?.error == .failed("timeout"))
+        #expect(out.first { $0.id == MessageID("ok") }?.text == ScriptedEngine.render("정상 문장", target: zh))
+
+        // The timed-out keys left the in-flight set: a resubmit sends the text again instead of waiting forever.
+        let again = await collect(await service.submit([Msg.text("hung2", "멈춘 문장")]))
+        #expect(again.map(\.error) == [.failed("timeout")])
+        #expect(await engine.recorder.allTexts.filter { $0 == "멈춘 문장" }.count == 2)
+        let d = await service.diagnostics
+        #expect(d.timeouts == 2)
+        #expect(d.failedCalls == 2)
+        #expect(d.cacheCount == 1)
+        await engine.gate.release()
+    }
+
+    @Test func defaultEngineTimeoutIsTenSeconds() async {
+        let service = TranslationService(engine: ScriptedEngine())
+        #expect(service.engineTimeout == .seconds(10))
+    }
+
     @Test func nonTranslatableKindsAreSkipped() async {
         let engine = ScriptedEngine()
         let service = TranslationService(engine: engine, batchWindowMilliseconds: 0)

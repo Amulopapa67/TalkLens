@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import Foundation
 import Testing
 @testable import TalkLensCore
 
@@ -57,6 +58,91 @@ import Testing
         #expect(c.keysByRecency == ["b"])
         #expect(c.capacity == 1)
     }
+
+    // MARK: memory
+
+    @Test func droppedCacheReleasesAllValues() {
+        let counter = DeinitCounter()
+        let n = 500
+        do {
+            var c = LRUCache<Int, Tracked>(capacity: n)
+            for i in 0..<n { c.set(i, Tracked(counter)) }
+            // Shuffle recency so the list order differs from insertion order.
+            for i in stride(from: 0, to: n, by: 3) { _ = c.get(i) }
+            #expect(c.remove(7) != nil)
+            #expect(c.count == n - 1)
+        } // dropped without removeAll()
+        #expect(counter.count == n)
+    }
+
+    @Test func evictedRemovedAndReplacedValuesAreReleasedImmediately() {
+        let counter = DeinitCounter()
+        var c = LRUCache<Int, Tracked>(capacity: 2)
+        c.set(1, Tracked(counter)); c.set(2, Tracked(counter)); c.set(3, Tracked(counter))
+        #expect(counter.count == 1)          // 1 was evicted
+        _ = c.remove(2)
+        #expect(counter.count == 2)
+        c.set(3, Tracked(counter))           // replacing a value releases the old one
+        #expect(counter.count == 3)
+        #expect(c.keysByRecency == [3])
+    }
+
+    @Test func copiesAreIndependent() {
+        var a = LRUCache<String, Int>(capacity: 3)
+        a.set("x", 1); a.set("y", 2)
+        var b = a
+        b.set("z", 3)
+        _ = b.get("x")
+        #expect(a.keysByRecency == ["y", "x"])
+        #expect(b.keysByRecency == ["x", "z", "y"])
+        #expect(a.peek("z") == nil)
+    }
+
+    @Test func randomizedOperationsMatchReferenceModel() {
+        var c = LRUCache<Int, Int>(capacity: 8)
+        var model: [(key: Int, value: Int)] = [] // most recent first
+        var mismatches = 0
+        for step in 0..<2_000 {
+            let k = Int.random(in: 0..<20)
+            switch Int.random(in: 0..<4) {
+            case 0, 1:
+                c.set(k, step)
+                model.removeAll { $0.key == k }
+                model.insert((k, step), at: 0)
+                if model.count > 8 { model.removeLast() }
+            case 2:
+                let v = c.get(k)
+                if let i = model.firstIndex(where: { $0.key == k }) {
+                    let e = model.remove(at: i)
+                    model.insert(e, at: 0)
+                    if v != e.value { mismatches += 1 }
+                } else if v != nil {
+                    mismatches += 1
+                }
+            default:
+                let v = c.remove(k)
+                let i = model.firstIndex { $0.key == k }
+                if v != i.map({ model[$0].value }) { mismatches += 1 }
+                if let i { model.remove(at: i) }
+            }
+            if c.keysByRecency != model.map(\.key) || c.count != model.count { mismatches += 1 }
+        }
+        #expect(mismatches == 0)
+    }
+}
+
+/// Counts deinits of `Tracked` values (leak tests).
+final class DeinitCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func increment() { lock.withLock { value += 1 } }
+    var count: Int { lock.withLock { value } }
+}
+
+final class Tracked {
+    let counter: DeinitCounter
+    init(_ counter: DeinitCounter) { self.counter = counter }
+    deinit { counter.increment() }
 }
 
 @Suite struct LatencyStatsTests {

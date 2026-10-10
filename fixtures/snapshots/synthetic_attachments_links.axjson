@@ -15,7 +15,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "김민준",
+                        "description" : "합성A",
                         "frame" : [
                           576,
                           207,
@@ -28,11 +28,11 @@
                         "frame" : [
                           626,
                           207,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "김민준"
+                        "value" : "합성A"
                       },
                       {
                         "description" : "이미지",
@@ -248,7 +248,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "박서연",
+                        "description" : "합성B",
                         "frame" : [
                           576,
                           635,
@@ -261,11 +261,11 @@
                         "frame" : [
                           626,
                           635,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "박서연"
+                        "value" : "합성B"
                       },
                       {
                         "children" : [
@@ -437,7 +437,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "이도윤",
+                        "description" : "합성C",
                         "frame" : [
                           576,
                           841,
@@ -450,11 +450,11 @@
                         "frame" : [
                           626,
                           841,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "이도윤"
+                        "value" : "합성C"
                       },
                       {
                         "description" : "이미지",

@@ -45,6 +45,8 @@ final class WatchSession {
     var reads = 0
     let clock = Stopwatch()
     let debounceMs = 120.0
+    /// Per-run random HMAC key for the chat tag (not dictionary-reversible, not stable across runs).
+    let tagger = RunScopedTagger()
 
     init(pid: pid_t, app: LiveAXNode) {
         self.pid = pid
@@ -114,10 +116,10 @@ final class WatchSession {
         do {
             let read = try KakaoChatReader.readCurrentChat()
             let ids = read.snapshot.messages.map(\.id)
-            var line = "read(\(reason)): messages=\(ids.count) chat=\(Redactor.shortHash(read.snapshot.chatKey)) parse=\(formatMs(read.elapsedMilliseconds))ms"
+            var line = "read(\(reason)): messages=\(ids.count) chat=\(tagger.tag(read.snapshot.chatKey)) parse=\(formatMs(read.elapsedMilliseconds))ms"
             if let previousIDs, previousKey == read.snapshot.chatKey {
                 let d = TranscriptDiffer.diff(old: previousIDs, new: ids)
-                line += " diff appended=\(d.appended.count) prepended=\(d.prepended.count) removed=\(d.removed.count) unchanged=\(d.unchanged.count) reset=\(d.isReset)"
+                line += " diff appended=\(d.appended.count) prepended=\(d.prepended.count) removed=\(d.removed.count) unchanged=\(d.unchanged.count) reset=\(d.isReset) reordered=\(d.isReordered)"
             } else if previousIDs != nil {
                 line += " diff chat-changed"
             }

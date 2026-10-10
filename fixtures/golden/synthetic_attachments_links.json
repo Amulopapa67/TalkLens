@@ -6,13 +6,13 @@
         "images" : 1,
         "links" : 0
       },
-      "author" : "김민준",
+      "author" : "합성A",
       "body" : "",
       "chips" : [
 
       ],
       "date" : "2026-10-10",
-      "id" : "ec4abc58912313aa",
+      "id" : "e979cd0c20f5c8f1",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "empty",
@@ -26,13 +26,13 @@
         "images" : 0,
         "links" : 1
       },
-      "author" : "김민준",
+      "author" : "합성A",
       "body" : "https://example.com/notice/123",
       "chips" : [
 
       ],
       "date" : "2026-10-10",
-      "id" : "a1a1d1a4007bce29",
+      "id" : "ecce1639ff7782bb",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "urlOnly",
@@ -89,13 +89,13 @@
         "images" : 0,
         "links" : 0
       },
-      "author" : "박서연",
+      "author" : "합성B",
       "body" : "",
       "chips" : [
 
       ],
       "date" : "2026-10-10",
-      "id" : "96b42e4bd1a10fe2",
+      "id" : "6c7e6ca2e891414d",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "empty",
@@ -109,13 +109,13 @@
         "images" : 0,
         "links" : 1
       },
-      "author" : "박서연",
+      "author" : "합성B",
       "body" : "자료는 여기 있어요 https://example.com/files/share/2026/fall/lab-seminar-schedule",
       "chips" : [
 
       ],
       "date" : "2026-10-10",
-      "id" : "4035f85d47fc2b45",
+      "id" : "8ed4057be0eb47ea",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -129,13 +129,13 @@
         "images" : 1,
         "links" : 0
       },
-      "author" : "이도윤",
+      "author" : "합성C",
       "body" : "",
       "chips" : [
 
       ],
       "date" : "2026-10-10",
-      "id" : "e7ba80b900ed84c5",
+      "id" : "d3b0ab7d90dbdbac",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "empty",

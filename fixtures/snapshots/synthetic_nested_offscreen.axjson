@@ -49,7 +49,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "김민준",
+                        "description" : "합성A",
                         "frame" : [
                           576,
                           -801,
@@ -62,11 +62,11 @@
                         "frame" : [
                           626,
                           -801,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "김민준"
+                        "value" : "합성A"
                       },
                       {
                         "frame" : [
@@ -197,7 +197,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "박서연",
+                        "description" : "합성B",
                         "frame" : [
                           576,
                           -683,
@@ -210,11 +210,11 @@
                         "frame" : [
                           626,
                           -683,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "박서연"
+                        "value" : "합성B"
                       },
                       {
                         "frame" : [
@@ -379,7 +379,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "이도윤",
+                        "description" : "합성C",
                         "frame" : [
                           576,
                           399,
@@ -392,11 +392,11 @@
                         "frame" : [
                           626,
                           399,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "이도윤"
+                        "value" : "합성C"
                       },
                       {
                         "frame" : [
@@ -591,7 +591,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "김민준",
+                        "description" : "합성A",
                         "frame" : [
                           576,
                           569,
@@ -604,11 +604,11 @@
                         "frame" : [
                           626,
                           569,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "김민준"
+                        "value" : "합성A"
                       },
                       {
                         "frame" : [
@@ -675,7 +675,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "박서연",
+                        "description" : "합성B",
                         "frame" : [
                           576,
                           630,
@@ -688,11 +688,11 @@
                         "frame" : [
                           626,
                           630,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "박서연"
+                        "value" : "합성B"
                       },
                       {
                         "frame" : [
@@ -876,7 +876,7 @@
                   {
                     "children" : [
                       {
-                        "description" : "이도윤",
+                        "description" : "합성C",
                         "frame" : [
                           576,
                           798,
@@ -889,11 +889,11 @@
                         "frame" : [
                           626,
                           798,
-                          38,
+                          32,
                           16
                         ],
                         "role" : "AXStaticText",
-                        "value" : "이도윤"
+                        "value" : "합성C"
                       },
                       {
                         "frame" : [

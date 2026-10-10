@@ -14,7 +14,7 @@
 //   left, AXStaticText author above the bubble, time right of the bubble); text-bearing divider buttons;
 //   notices as centered AXStaticText; photo / sticker / file / link-preview layouts; time label "오후 3:12"
 //   and AXHelp "2026. 10. 10.".
-// All names and texts are invented or taken from fixtures/test_messages_ko.txt.
+// Person names are obviously fake (합성A–합성D); texts are invented or taken from fixtures/test_messages_ko.txt.
 
 import CoreGraphics
 import Foundation
@@ -225,7 +225,7 @@ struct SyntheticChat {
         }))
     }
 
-    /// Centered notice ("박서연님이 들어왔습니다.") as a static text (assumption).
+    /// Centered notice ("합성B님이 들어왔습니다.") as a static text (assumption).
     mutating func notice(_ text: String) {
         divider(text, style: .staticText)
     }
@@ -323,11 +323,11 @@ enum SyntheticFixtures {
     static func groupBasic() -> AXSnapshotFile {
         var c = SyntheticChat(title: "합성 테스트방", options: .init(searchField: true, windowHeight: 760))
         c.divider(nil, style: .emptyButton) // as observed: no text exposed
-        c.other("김민준", .text("내일 랩미팅은 오후 2시에서 4시로 변경되었습니다."))
+        c.other("합성A", .text("내일 랩미팅은 오후 2시에서 4시로 변경되었습니다."))
         c.other(nil, .text("교수님께서 이번 주 금요일 세미나는 온라인으로 진행한다고 하셨어요."), time: "오후 3:12", help: "2026. 10. 10.")
         c.mine(.text("넵 알겠습니다!"), time: "오후 3:13", help: "2026. 10. 10.")
-        c.other("박서연", .text("ㅋㅋㅋㅋ"), time: "오후 3:14", help: "2026. 10. 10.")
-        c.other("이도윤", .text("ㅇㅋ ㄱㄱ"), time: "오후 3:14", help: "2026. 10. 10.")
+        c.other("합성B", .text("ㅋㅋㅋㅋ"), time: "오후 3:14", help: "2026. 10. 10.")
+        c.other("합성C", .text("ㅇㅋ ㄱㄱ"), time: "오후 3:14", help: "2026. 10. 10.")
         c.other(nil, .text("수고하셨습니다~"), time: "오후 3:15", help: "2026. 10. 10.")
         c.mine(.text("오늘 점심 학식 vs 배달?"), time: "오후 3:16", help: "2026. 10. 10.", unread: 2)
         return c.build(note: "Group chat basics: author groups, continuation, mine, empty divider button, header search field.")
@@ -335,11 +335,11 @@ enum SyntheticFixtures {
 
     static func mineContinuation() -> AXSnapshotFile {
         var c = SyntheticChat(title: "합성 1:1 대화", options: .init(windowHeight: 760))
-        c.other("박서연", .text("서버 GPU 2번은 제가 오늘 밤까지 쓸게요"), time: "오전 10:02", help: "2026. 10. 9.")
+        c.other("합성B", .text("서버 GPU 2번은 제가 오늘 밤까지 쓸게요"), time: "오전 10:02", help: "2026. 10. 9.")
         c.mine(.text("아 그거 제가 착각했네요 ㅎㅎ 죄송합니다"))
         c.mine(.text("Deadline은 Friday까지예요"))
         c.mine(.text("好的，我知道了"), time: "오전 10:05", help: "2026. 10. 9.", unread: 1)
-        c.other("박서연", .text("헐 대박 ㄷㄷ"), time: "오전 10:06", help: "2026. 10. 9.")
+        c.other("합성B", .text("헐 대박 ㄷㄷ"), time: "오전 10:06", help: "2026. 10. 9.")
         c.other(nil, .text("😂😂"))
         c.other(nil, .text("12345"), time: "오전 10:07", help: "2026. 10. 9.")
         c.other(nil, .text("ㅋㅋㅋㅋ"))
@@ -351,31 +351,31 @@ enum SyntheticFixtures {
     static func dividersSystem() -> AXSnapshotFile {
         var c = SyntheticChat(title: "합성 공지방", options: .init(windowHeight: 760))
         c.divider("2026년 10월 9일 목요일")
-        c.other("김민준", .text("오늘 3교시 휴강입니다. 보강 일정은 추후 공지하겠습니다."), time: "오후 9:40")
-        c.notice("박서연님이 들어왔습니다.")
-        c.other("박서연", .text("조교입니다. 질문은 수업 게시판에 올려주시면 답변드리겠습니다."), time: "오후 11:58")
+        c.other("합성A", .text("오늘 3교시 휴강입니다. 보강 일정은 추후 공지하겠습니다."), time: "오후 9:40")
+        c.notice("합성B님이 들어왔습니다.")
+        c.other("합성B", .text("조교입니다. 질문은 수업 게시판에 올려주시면 답변드리겠습니다."), time: "오후 11:58")
         c.divider("2026년 10월 10일 금요일", style: .staticText)
-        c.other("이도윤", .text("출석 체크는 KLMS에서 해주세요."), time: "오전 9:01", help: "10월 10일")
-        c.notice("이도윤님이 나갔습니다.")
+        c.other("합성C", .text("출석 체크는 KLMS에서 해주세요."), time: "오전 9:01", help: "10월 10일")
+        c.notice("합성C님이 나갔습니다.")
         c.mine(.text("10/15 (수) 연구실 대청소 있습니다"), time: "오전 9:30", help: "2026. 10. 10.")
         c.divider("10월 11일 토요일")
-        c.other("김민준", .text("중간고사 범위는 1장부터 6장까지입니다."), time: "오후 1:00")
+        c.other("합성A", .text("중간고사 범위는 1장부터 6장까지입니다."), time: "오후 1:00")
         return c.build(note: "Text-bearing date dividers (button and static text; with and without year), join/leave notices, dates without AXHelp, year-less AXHelp.")
     }
 
     static func attachmentsLinks() -> AXSnapshotFile {
         var c = SyntheticChat(title: "합성 자료방", options: .init(windowHeight: 1000))
-        c.other("김민준", .image(CGSize(width: 160, height: 120)))
+        c.other("합성A", .image(CGSize(width: 160, height: 120)))
         c.other(nil, .link(text: "https://example.com/notice/123", full: "https://example.com/notice/123"),
                 time: "오후 2:01", help: "2026. 10. 10.")
         c.mine(.text("학회 포스터 초안 공유드립니다. 피드백 부탁드려요 🙏"))
         c.mine(.image(CGSize(width: 160, height: 120)), time: "오후 2:03", help: "2026. 10. 10.")
-        c.other("박서연", .file(name: "과제2_보고서.pdf", info: "유효기간 ~ 2026. 10. 24. · 용량 1.2MB"),
+        c.other("합성B", .file(name: "과제2_보고서.pdf", info: "유효기간 ~ 2026. 10. 24. · 용량 1.2MB"),
                 time: "오후 2:05", help: "2026. 10. 10.")
         c.other(nil, .link(text: "자료는 여기 있어요 https://example.com/files/share/2026/fall/...",
                            full: "https://example.com/files/share/2026/fall/lab-seminar-schedule"),
                 time: "오후 2:05", help: "2026. 10. 10.")
-        c.other("이도윤", .image(CGSize(width: 100, height: 100)), time: "오후 2:06", help: "2026. 10. 10.")
+        c.other("합성C", .image(CGSize(width: 100, height: 100)), time: "오후 2:06", help: "2026. 10. 10.")
         c.mine(.link(text: "https://example.com/notice/123", full: "https://example.com/notice/123"),
                time: "오후 2:07", help: "2026. 10. 10.")
         return c.build(note: "Image, sticker, file and link messages (with previews and a truncated URL).")
@@ -396,12 +396,12 @@ enum SyntheticFixtures {
     static func multilineLong() -> AXSnapshotFile {
         var c = SyntheticChat(title: "합성 연구실", options: .init(avatarStyle: .image))
         // The long message is the top row and only partly visible; it is still read in full.
-        c.other("박서연", .text(longParagraph), time: "오후 4:15", help: "2026. 10. 10.")
-        c.other("김민준", .text("안녕하세요 여러분,\n다음 주 월요일부터 실험실 출입 카드가 새로 발급됩니다.\n기존 카드는 금요일까지 행정실에 반납해 주세요.\n문의는 저에게 개인 톡 주세요."),
+        c.other("합성B", .text(longParagraph), time: "오후 4:15", help: "2026. 10. 10.")
+        c.other("합성A", .text("안녕하세요 여러분,\n다음 주 월요일부터 실험실 출입 카드가 새로 발급됩니다.\n기존 카드는 금요일까지 행정실에 반납해 주세요.\n문의는 저에게 개인 톡 주세요."),
                 time: "오후 4:20", help: "2026. 10. 10.")
         c.mine(.text("논문 리비전 마감이 다음 주라서 이번 주는 다들 화이팅!"), time: "오후 4:21", help: "2026. 10. 10.")
         c.mine(.text("네 확인했습니다.\n카드는 목요일에 반납할게요."), time: "오후 4:26", help: "2026. 10. 10.")
-        c.other("이도윤", .text("@린루이 혹시 오늘 저녁 회식 참석 가능하세요?"))
+        c.other("합성C", .text("@린루이 혹시 오늘 저녁 회식 참석 가능하세요?"))
         c.other(nil, .text("내일 오전 10시 30분에 E3-1 1501호에서 뵙겠습니다."), time: "오후 4:30", help: "2026. 10. 10.")
         return c.build(note: "Multi-line and long (> 1000 characters) messages, @mention, AXImage avatars.")
     }
@@ -410,21 +410,21 @@ enum SyntheticFixtures {
         var c = SyntheticChat(title: "합성 스크롤방", options: .init(nestedBody: true, bottomAnchorRow: 11, spacerRow: false))
         // Rows 0–4 end up above the visible area (off-screen but present in the AX tree).
         c.divider(nil, style: .emptyButton)
-        c.other("김민준", .text("과제 2 마감이 10월 20일 23:59까지로 연장되었습니다."), time: "오후 5:00", help: "2026. 10. 8.")
+        c.other("합성A", .text("과제 2 마감이 10월 20일 23:59까지로 연장되었습니다."), time: "오후 5:00", help: "2026. 10. 8.")
         c.mine(.text("넵 알겠습니다!"), time: "오후 5:01", help: "2026. 10. 8.")
-        c.other("박서연", .text(SyntheticFixtures.longParagraph), time: "오후 5:10", help: "2026. 10. 8.")
+        c.other("합성B", .text(SyntheticFixtures.longParagraph), time: "오후 5:10", help: "2026. 10. 8.")
         c.mine(.text("수고하셨습니다~"), time: "오후 5:11", help: "2026. 10. 8.")
         // Visible rows.
         c.divider("2026년 10월 9일 목요일")
-        c.other("이도윤", .text("오늘 3교시 휴강입니다. 보강 일정은 추후 공지하겠습니다."))
+        c.other("합성C", .text("오늘 3교시 휴강입니다. 보강 일정은 추후 공지하겠습니다."))
         c.other(nil, .text("졸업 요건 관련해서는 학과 사무실에 문의해 보세요."), time: "오전 11:20", help: "2026. 10. 9.")
         c.mine(.text("ㅠㅠ 데이터셋 다운로드가 너무 느리네요"), time: "오전 11:21", help: "2026. 10. 9.", unread: 1)
-        c.other("김민준", .text("서버 GPU 2번은 제가 오늘 밤까지 쓸게요"), time: "오전 11:25", help: "2026. 10. 9.")
-        c.other("박서연", .text("헐 대박 ㄷㄷ"))
+        c.other("합성A", .text("서버 GPU 2번은 제가 오늘 밤까지 쓸게요"), time: "오전 11:25", help: "2026. 10. 9.")
+        c.other("합성B", .text("헐 대박 ㄷㄷ"))
         c.other(nil, .text("아 그거 제가 착각했네요 ㅎㅎ 죄송합니다"), time: "오전 11:26", help: "2026. 10. 9.")
         // Below the visible area (the user scrolled up a little).
         c.mine(.text("오늘 점심 학식 vs 배달?"), time: "오전 11:40", help: "2026. 10. 9.")
-        c.other("이도윤", .text("넵 알겠습니다!"), time: "오전 11:41", help: "2026. 10. 9.")
+        c.other("합성C", .text("넵 알겠습니다!"), time: "오전 11:41", help: "2026. 10. 9.")
         return c.build(note: "Nested AXScrollArea→AXTextArea bodies, AXButton avatars, Count Label, off-screen rows above and below the visible area.")
     }
 
@@ -437,7 +437,7 @@ enum SyntheticFixtures {
             "출석 체크는 KLMS에서 해주세요.", "아 그거 제가 착각했네요 ㅎㅎ 죄송합니다", "오늘 점심 학식 vs 배달?",
             "Deadline은 Friday까지예요", "헐 대박 ㄷㄷ",
         ]
-        let authors = ["김민준", "박서연", "이도윤", "최지우"]
+        let authors = ["합성A", "합성B", "합성C", "합성D"]
         var c = SyntheticChat(title: "합성 대용량방")
         var minute = 9 * 60
         var day = 7

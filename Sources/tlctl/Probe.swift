@@ -49,15 +49,17 @@ func runProbe(arguments: [String]) -> Int32 {
     let title = window.title ?? ""
     let key = MessageIdentity.chatKey(forTitle: title)
     let messages = MessageIdentity.assign(parsed, chatKey: key)
+    // Per-run random HMAC key: tags correlate rows within this output only and cannot be dictionary-reversed.
+    let tagger = RunScopedTagger()
 
     let mine = messages.filter { $0.isMine }.count
     let system = messages.filter { $0.isSystem }.count
     let others = messages.count - mine - system
-    print("chat: title=\(Redactor.redactTitle(title)) key=\(Redactor.shortHash(key)) rows=\(rowsTotal) transcript=\(loc.transcriptRoot.role ?? "?")")
+    print("chat: title=\(Redactor.redactTitle(title)) key=\(tagger.tag(key)) rows=\(rowsTotal) transcript=\(loc.transcriptRoot.role ?? "?")")
     if !summaryOnly {
         for m in messages {
             let side = m.isSystem ? "system" : (m.isMine ? "mine" : "other")
-            let author = m.author.map { "author#" + Redactor.shortHash($0) } ?? "-"
+            let author = m.author.map { "author#" + tagger.tag($0) } ?? "-"
             print("  \(side) \(author) time=\(m.timeRaw ?? "-") date=\(m.date ?? "-") body=\(Redactor.redact(m.body)) img=\(m.attachments.images) link=\(m.attachments.links) file=\(m.attachments.files)")
         }
     }

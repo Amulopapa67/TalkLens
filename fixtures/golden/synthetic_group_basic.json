@@ -6,7 +6,7 @@
         "images" : 0,
         "links" : 0
       },
-      "author" : "김민준",
+      "author" : "합성A",
       "body" : "내일 랩미팅은 오후 2시에서 4시로 변경되었습니다.",
       "chips" : [
         {
@@ -15,7 +15,7 @@
         }
       ],
       "date" : "2026-10-10",
-      "id" : "ef1968f4b0ab6ae0",
+      "id" : "06be0260bc5e6cb2",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -29,7 +29,7 @@
         "images" : 0,
         "links" : 0
       },
-      "author" : "김민준",
+      "author" : "합성A",
       "body" : "교수님께서 이번 주 금요일 세미나는 온라인으로 진행한다고 하셨어요.",
       "chips" : [
         {
@@ -42,7 +42,7 @@
         }
       ],
       "date" : "2026-10-10",
-      "id" : "e7d57a2fae9705b8",
+      "id" : "ec32e85e9c3fa5f3",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",
@@ -76,7 +76,7 @@
         "images" : 0,
         "links" : 0
       },
-      "author" : "박서연",
+      "author" : "합성B",
       "body" : "ㅋㅋㅋㅋ",
       "chips" : [
         {
@@ -85,7 +85,7 @@
         }
       ],
       "date" : "2026-10-10",
-      "id" : "9ee14ebd06c5d218",
+      "id" : "340b7faa928ac9a1",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "jamoOnly",
@@ -99,7 +99,7 @@
         "images" : 0,
         "links" : 0
       },
-      "author" : "이도윤",
+      "author" : "합성C",
       "body" : "ㅇㅋ ㄱㄱ",
       "chips" : [
         {
@@ -112,7 +112,7 @@
         }
       ],
       "date" : "2026-10-10",
-      "id" : "50aa9ef6ce3d157f",
+      "id" : "5e71a4865ef71a4b",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "jamoOnly",
@@ -126,7 +126,7 @@
         "images" : 0,
         "links" : 0
       },
-      "author" : "이도윤",
+      "author" : "합성C",
       "body" : "수고하셨습니다~",
       "chips" : [
         {
@@ -135,7 +135,7 @@
         }
       ],
       "date" : "2026-10-10",
-      "id" : "985ddd9434d35ab6",
+      "id" : "0f4eff220171d431",
       "isMine" : false,
       "isSystem" : false,
       "kind" : "translate",

@@ -106,15 +106,3 @@ public enum KakaoChatReader {
         return try read(window: window, parser: parser)
     }
 }
-
-/// Serial executor for all live AX reads (architecture §1): keeps AX IPC off the main thread.
-public actor AXReader {
-    public init() {}
-
-    /// Reads the current chat window. Fresh LiveAXNode graphs are created per call and never escape the actor.
-    public func readCurrentChat(referenceYear: Int? = nil) throws -> ChatWindowRead {
-        var parser = TranscriptParser()
-        if let referenceYear { parser.referenceYear = referenceYear }
-        return try KakaoChatReader.readCurrentChat(parser: parser)
-    }
-}
