@@ -54,3 +54,11 @@
   - TranscriptDiffer 用 id 集合一次扫描：中间某条被编辑或删除不算 reset，变化的 id 记进 `appended`。只有新旧完全没有共同 id 才算 reset。
   - `parseDividerDate` 要求整行就是日期（可带星期），避免把提到日期的普通消息当成分隔行。
   - 日期：2026-10-10
+- **D-007 菜单栏用 NSStatusItem + AppKit 生命周期，不用 MenuBarExtra**
+  - 决定：自定义 `main.swift` 加 `NSStatusItem`。浮动面板和设置/引导/关于窗口都由 AppKit 管理。
+  - 理由：
+    - `--self-check` 要在 NSApplication 启动前无 UI 运行。
+    - LSUIElement 应用用 SwiftUI `Settings` scene 打开设置比较别扭。
+    - 面板需要精细控制 level 和 collectionBehavior。
+  - 面板 collectionBehavior = `[.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]`：切到 KakaoTalk 所在 Space（含全屏）时面板已在；KakaoTalk 不在前台时隐藏，所以不会留在别的 Space。
+  - 日期：2026-10-10
