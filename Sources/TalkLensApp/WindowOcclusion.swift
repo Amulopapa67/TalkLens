@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
-// Which parts of the followed KakaoTalk chat window are covered by other windows, so the inline overlay
+// Which parts of a followed KakaoTalk chat window are covered by other windows (one instance per chat window;
+// other KakaoTalk windows above it count as covering windows too), so the inline overlay
 // (a `.floating` window) never paints over them.
 //
 // Window-server metadata only: owner pid, window number, layer, alpha and bounds from
@@ -64,7 +65,12 @@ final class WindowOcclusion {
     /// Recomputes the occlusion of the KakaoTalk window whose AX frame is `chatFrame`.
     @discardableResult
     func update(kakaoPID: pid_t, chatFrame: CGRect) -> OcclusionSnapshot {
-        let windows = Self.onScreenWindows()
+        update(windows: Self.onScreenWindows(), kakaoPID: kakaoPID, chatFrame: chatFrame)
+    }
+
+    /// Same, against a window list fetched once for several chat windows.
+    @discardableResult
+    func update(windows: [WindowListEntry], kakaoPID: pid_t, chatFrame: CGRect) -> OcclusionSnapshot {
         let (snapshot, matched) = Self.evaluate(windows: windows, kakaoPID: kakaoPID, chatFrame: chatFrame,
                                                 ownPID: getpid(), cachedWindow: cachedWindow)
         cachedWindow = matched

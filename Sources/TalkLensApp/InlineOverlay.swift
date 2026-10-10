@@ -2,9 +2,11 @@
 // Inline ("immersive") display mode: a transparent, click-through window over the chat window's transcript
 // viewport that paints each translation over its bubble's text area.
 //
-// Read-only: nothing is injected into KakaoTalk. The overlay ignores all mouse events (clicks, selection,
-// right-click and scrolling go straight to KakaoTalk). Scroll, mouse-move and modifier-flag events are only
-// *observed* through NSEvent monitors; no event is ever posted. While following a scroll, the only AX
+// One overlay per followed chat window (ChatSession). Read-only: nothing is injected into KakaoTalk. The
+// overlay ignores all mouse events (clicks, selection, right-click and scrolling go straight to KakaoTalk).
+// Scroll, mouse-move and modifier-flag events are only *observed* through one shared set of NSEvent monitors
+// (InlineEventHub), which routes scrolls to the overlay whose chat window is topmost under the pointer; no
+// event is ever posted. While following a scroll, the only AX
 // traffic is one position/size read of the scroll anchor element per display frame.
 //
 // Occlusion: the overlay sits at `.floating`, so it would paint over any window that covers the chat window.
@@ -250,6 +252,17 @@ final class TextMeasurer {
 
 // MARK: - Controller
 
+/// The chat window an overlay belongs to (ChatSession).
+@MainActor
+protocol InlineOverlayHost: AnyObject {
+    /// Chat window frame (AX coordinates), nil when unknown.
+    var windowAX: CGRect? { get }
+    /// Cheap single-element reads (the scroll anchor's frame).
+    var geometryReader: WindowGeometryReader { get }
+    /// Asks for a full transcript read of the chat window.
+    func requestRead()
+}
+
 @MainActor
 final class InlineOverlayController {
     static let fastTrackInterval: Duration = .milliseconds(16)
@@ -262,7 +275,7 @@ final class InlineOverlayController {
 
     let state = InlineOverlayState()
     private let model: SidebarViewModel
-    private let tracker: WindowTracker
+    weak var host: InlineOverlayHost?
     private let diagnostics: Diagnostics
     private let window = InlineOverlayWindow()
     private let container = InlineContainerView()
@@ -300,17 +313,14 @@ final class InlineOverlayController {
     private var resizing = false
     private var hoveredID: MessageID?
     private var lastMouse: NSPoint?
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
     private var fastTask: Task<Void, Never>?
     private var lastChangeAt = ContinuousClock.now
     private var burstUntil: ContinuousClock.Instant?
     private var movedSinceRead = false
     private var resizeTask: Task<Void, Never>?
 
-    init(model: SidebarViewModel, tracker: WindowTracker, diagnostics: Diagnostics) {
+    init(model: SidebarViewModel, diagnostics: Diagnostics) {
         self.model = model
-        self.tracker = tracker
         self.diagnostics = diagnostics
         hosting = NSHostingView(rootView: InlineOverlayView(state: state))
         // The hosting view's size is driven by the viewport, never by SwiftUI's ideal size.
@@ -352,7 +362,7 @@ final class InlineOverlayController {
     }
 
     /// Window moved / resized / (de)minimized.
-    func geometryChanged(_ geometry: WindowTracker.Geometry) {
+    func geometryChanged() {
         updateViewport()
     }
 
@@ -391,7 +401,6 @@ final class InlineOverlayController {
         active = value
         logger.debug("inline active=\(value, privacy: .public)")
         if value {
-            installMonitors()
             optionHeld = NSEvent.modifierFlags.contains(.option)
             updateViewport()
             rebuild()
@@ -400,7 +409,6 @@ final class InlineOverlayController {
             window.orderFrontRegardless()
             updateContentVisibility(animated: false)
         } else {
-            removeMonitors()
             stopFastTracking()
             resizeTask?.cancel()
             resizeTask = nil
@@ -438,7 +446,7 @@ final class InlineOverlayController {
 
     /// Follows the chat window: viewport = window frame + the viewport's edge distances at the last read.
     private func updateViewport() {
-        let window = tracker.geometry.windowAX
+        let window = host?.windowAX
         if let insets, let window {
             viewportAX = InlineLayout.viewport(window: window, insets: insets)
             let sizeChanged = windowAtRead.map { $0.size != window.size } ?? false
@@ -536,7 +544,7 @@ final class InlineOverlayController {
             guard !Task.isCancelled, let self else { return }
             self.resizeTask = nil
             // Bubbles reflow on resize: only a fresh read gives their frames.
-            self.tracker.requestRead()
+            self.host?.requestRead()
         }
     }
 
@@ -674,67 +682,49 @@ final class InlineOverlayController {
         return InlinePopover(id: id, rect: rect, text: value, chips: chips)
     }
 
-    // MARK: Event monitors (observation only; nothing is posted)
+    // MARK: Observed events (from InlineEventHub; observation only, nothing is posted)
 
-    private func installMonitors() {
-        if globalMonitor == nil {
-            globalMonitor = NSEvent.addGlobalMonitorForEvents(
-                matching: [.scrollWheel, .mouseMoved, .flagsChanged, .leftMouseDragged]
-            ) {
-                [weak self] event in
-                let type = event.type
-                let flags = event.modifierFlags
-                MainActor.assumeIsolated { self?.observed(type, flags: flags) }
-            }
-        }
-        if localMonitor == nil {
-            localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged]) { [weak self] event in
-                let flags = event.modifierFlags
-                MainActor.assumeIsolated { self?.observed(.flagsChanged, flags: flags) }
-                return event
-            }
-        }
+    /// ⌥ pressed or released: every overlay shows KakaoTalk's originals while it is held.
+    func optionChanged(_ held: Bool) {
+        guard active, held != optionHeld else { return }
+        optionHeld = held
+        updateContentVisibility(animated: true)
+        if held { setHover(nil) } else { updateHover() }
     }
 
-    private func removeMonitors() {
-        if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
-        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
-        globalMonitor = nil
-        localMonitor = nil
-    }
-
-    private func observed(_ type: NSEvent.EventType, flags: NSEvent.ModifierFlags) {
+    /// Pointer moved (global Cocoa coordinates).
+    func mouseMoved(to mouse: NSPoint) {
         guard active else { return }
-        switch type {
-        case .flagsChanged:
-            let held = flags.contains(.option)
-            guard held != optionHeld else { return }
-            optionHeld = held
-            updateContentVisibility(animated: true)
-            if held { setHover(nil) } else { updateHover() }
-        case .scrollWheel:
-            lastMouse = NSEvent.mouseLocation
-            guard let windowAX = tracker.geometry.windowAX, let primary = NSScreen.screens.first else { return }
-            let chat = ScreenGeometry.axToCocoa(windowAX, primaryMaxY: primary.frame.maxY)
-            let mouse = NSEvent.mouseLocation
-            // Scrolling a window that covers the chat window does not scroll KakaoTalk.
-            guard chat.contains(mouse), !isOccluded(cocoa: mouse) else { return }
-            lastChangeAt = .now
-            startFastTracking()
-        case .mouseMoved:
-            lastMouse = NSEvent.mouseLocation
-            updateHover()
-        case .leftMouseDragged:
-            // Dragging KakaoTalk's scroller (or a selection that auto-scrolls) inside the viewport. Drags
-            // elsewhere (e.g. moving the window by its title bar) are handled by the window tracker.
-            lastMouse = NSEvent.mouseLocation
-            let mouse = NSEvent.mouseLocation
-            guard window.frame.contains(mouse), !isOccluded(cocoa: mouse) else { return }
-            lastChangeAt = .now
-            startFastTracking()
-        default:
-            break
-        }
+        lastMouse = mouse
+        updateHover()
+    }
+
+    /// True when a scroll at `mouse` scrolls this chat window: the pointer is over the window and no other
+    /// window (including another KakaoTalk chat window) covers that point.
+    func acceptsScroll(at mouse: NSPoint) -> Bool {
+        guard active, let windowAX = host?.windowAX, let primary = NSScreen.screens.first else { return false }
+        let chat = ScreenGeometry.axToCocoa(windowAX, primaryMaxY: primary.frame.maxY)
+        return chat.contains(mouse) && !isOccluded(cocoa: mouse)
+    }
+
+    /// True when a drag at `mouse` is inside this overlay's viewport and not over a covering window (dragging
+    /// KakaoTalk's scroller or a selection that auto-scrolls). Window drags are tracked via AXMoved.
+    func acceptsDrag(at mouse: NSPoint) -> Bool {
+        active && window.frame.contains(mouse) && !isOccluded(cocoa: mouse)
+    }
+
+    /// A scroll or drag routed to this overlay: follow the transcript.
+    func scrollObserved(at mouse: NSPoint) {
+        guard active else { return }
+        lastMouse = mouse
+        lastChangeAt = .now
+        startFastTracking()
+    }
+
+    /// The pointer moved during a scroll / drag routed elsewhere: only remember where it is.
+    func notePointer(_ mouse: NSPoint) {
+        guard active else { return }
+        lastMouse = mouse
     }
 
     // MARK: Fast tracking
@@ -759,7 +749,7 @@ final class InlineOverlayController {
             self.fastTask = nil
             self.burstUntil = nil
             // Re-anchor: new rows may have scrolled in and frames are now known exactly.
-            if self.movedSinceRead { self.tracker.requestRead() }
+            if self.movedSinceRead { self.host?.requestRead() }
         }
     }
 
@@ -770,13 +760,13 @@ final class InlineOverlayController {
     }
 
     private func fastTrackTick() async {
-        guard let anchor = scrollAnchor else { return }
+        guard let anchor = scrollAnchor, let reader = host?.geometryReader else { return }
         let generation = anchorGeneration
-        let frame = await tracker.geometryReader.frame(of: anchor.element)
+        let frame = await reader.frame(of: anchor.element)
         diagnostics.recordOverlayFastTrackTick()
         // A newer read re-anchored meanwhile: this frame belongs to the old anchor.
         guard generation == anchorGeneration, let frame else { return }
-        let delta = InlineLayout.scrollDelta(anchorNow: frame, windowNow: tracker.geometry.windowAX,
+        let delta = InlineLayout.scrollDelta(anchorNow: frame, windowNow: host?.windowAX,
                                              anchorAtRead: anchor.frameAtRead, windowAtRead: windowAtRead)
         guard abs(delta - scrollDelta) >= 0.5 else { return }
         scrollDelta = delta
@@ -790,5 +780,75 @@ final class InlineOverlayController {
         }
         applyOffset()
         updateHover()
+    }
+}
+
+// MARK: - Event hub
+
+/// One set of NSEvent monitors for all overlays (observation only; nothing is posted). ⌥ and pointer moves go
+/// to every active overlay (each hovers only where its chat window is not covered); scrolls and drags go to
+/// the overlay whose chat window is topmost under the pointer.
+@MainActor
+final class InlineEventHub {
+    /// Active overlays, front-most chat window first when known.
+    var overlays: () -> [InlineOverlayController] = { [] }
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
+
+    var isInstalled: Bool { globalMonitor != nil }
+
+    func setEnabled(_ enabled: Bool) {
+        if enabled { install() } else { remove() }
+    }
+
+    private func install() {
+        if globalMonitor == nil {
+            globalMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.scrollWheel, .mouseMoved, .flagsChanged, .leftMouseDragged]
+            ) { [weak self] event in
+                let type = event.type
+                let flags = event.modifierFlags
+                MainActor.assumeIsolated { self?.observed(type, flags: flags) }
+            }
+        }
+        if localMonitor == nil {
+            localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged]) { [weak self] event in
+                let flags = event.modifierFlags
+                MainActor.assumeIsolated { self?.observed(.flagsChanged, flags: flags) }
+                return event
+            }
+        }
+    }
+
+    private func remove() {
+        if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
+        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        globalMonitor = nil
+        localMonitor = nil
+    }
+
+    private func observed(_ type: NSEvent.EventType, flags: NSEvent.ModifierFlags) {
+        let targets = overlays()
+        guard !targets.isEmpty else { return }
+        switch type {
+        case .flagsChanged:
+            let held = flags.contains(.option)
+            for overlay in targets { overlay.optionChanged(held) }
+        case .mouseMoved:
+            let mouse = NSEvent.mouseLocation
+            for overlay in targets { overlay.mouseMoved(to: mouse) }
+        case .scrollWheel:
+            let mouse = NSEvent.mouseLocation
+            let target = targets.first { $0.acceptsScroll(at: mouse) }
+            for overlay in targets where overlay !== target { overlay.notePointer(mouse) }
+            target?.scrollObserved(at: mouse)
+        case .leftMouseDragged:
+            let mouse = NSEvent.mouseLocation
+            let target = targets.first { $0.acceptsDrag(at: mouse) }
+            for overlay in targets where overlay !== target { overlay.notePointer(mouse) }
+            target?.scrollObserved(at: mouse)
+        default:
+            break
+        }
     }
 }

@@ -2,6 +2,9 @@
 // Snapshot → diff → preprocess → rows → translation. All chat content lives only in memory here; nothing is
 // written to disk and nothing but counts/durations is logged.
 //
+// One model per followed chat window (ChatSession); it submits on its own TranslationService channel, so
+// windows never cancel each other's translations while the cache and in-flight dedupe stay shared.
+//
 // `rows` covers every loaded message of the chat (not only the ones on screen), so the inline overlay can draw
 // whatever scrolls into view at once, and everything loaded is pre-translated: visible messages first (newest
 // first), then the rest by distance from the viewport. `visibleIDs` marks the rows on screen; the sidebar list
@@ -79,6 +82,8 @@ final class SidebarViewModel {
     static let translationCap = TranslationPriority.defaultCap
 
     @ObservationIgnored let service: TranslationService
+    /// TranslationService channel of this model's submissions.
+    @ObservationIgnored let channel: String
     @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private let diagnostics: Diagnostics
     @ObservationIgnored private var glossary: Glossary
@@ -96,8 +101,10 @@ final class SidebarViewModel {
     /// Ids of the current submission without an outcome yet, in submission (priority) order.
     @ObservationIgnored private var outstanding: [MessageID] = []
 
-    init(service: TranslationService, glossary: Glossary, settings: AppSettings, diagnostics: Diagnostics) {
+    init(service: TranslationService, glossary: Glossary, settings: AppSettings, diagnostics: Diagnostics,
+         channel: String = TranslationService.defaultChannel) {
         self.service = service
+        self.channel = channel
         self.settings = settings
         self.diagnostics = diagnostics
         self.glossary = glossary
@@ -170,6 +177,11 @@ final class SidebarViewModel {
 
     func refreshEngineStatus() async {
         engineStatus = await service.status()
+    }
+
+    /// Adopts an engine status checked elsewhere (shared by all models).
+    func setEngineStatus(_ status: EngineStatus?) {
+        if engineStatus != status { engineStatus = status }
     }
 
     // MARK: - Ingest
@@ -348,9 +360,10 @@ final class SidebarViewModel {
         let previous = translateTask
         previous?.cancel()
         let service = self.service
+        let channel = self.channel
         translateTask = Task {
             await previous?.value
-            await service.cancelAll()
+            await service.cancel(channel: channel)
         }
     }
 
@@ -372,12 +385,13 @@ final class SidebarViewModel {
         let previous = translateTask
         previous?.cancel()
         let service = self.service
+        let channel = self.channel
         translateTask = Task { [weak self] in
             // Serialize with the previous task so an older submit can never cancel a newer one.
             await previous?.value
             guard !Task.isCancelled else { return }
             if batch.isEmpty {
-                await service.cancelAll()
+                await service.cancel(channel: channel)
                 return
             }
             var hits: [(MessageID, String)] = []
@@ -392,7 +406,7 @@ final class SidebarViewModel {
             guard !Task.isCancelled else { return }
             self?.applyCached(hits)
             guard !misses.isEmpty else { return }
-            let stream = await service.submit(misses)
+            let stream = await service.submit(misses, channel: channel)
             for await outcome in stream {
                 guard !Task.isCancelled else { break }
                 self?.apply(outcome)

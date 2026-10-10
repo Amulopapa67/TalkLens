@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Scheduler: priority, in-flight dedupe, batching, cancellation, in-memory LRU cache (docs/architecture.md §5).
 //
+// Channels: every submission belongs to a channel (one per followed chat window). A new submission cancels
+// only the previous submission on the same channel; the cache and the in-flight dedupe are shared by all
+// channels, and engine calls are serialized across channels (one call at a time; the preferred channel's
+// next batch goes first when several are waiting).
+//
 // Privacy: the cache lives in memory only and is never persisted; logs carry counts and durations only.
 
 import Foundation
@@ -71,11 +76,21 @@ public actor TranslationService {
     /// `.failed("timeout")` and scheduling continues; the abandoned call is cancelled and its result ignored.
     public nonisolated let engineTimeout: Duration
 
+    /// Channel used by callers that do not pass one.
+    public static let defaultChannel = "default"
+
     private var cache: LRUCache<TranslationCacheKey, String>
     /// Keys currently being translated by some engine call (possibly from a cancelled submission).
     private var inFlight: Set<TranslationCacheKey> = []
+    /// Last submission id handed out (ids are unique across channels).
     private var generation: UInt64 = 0
-    private var current: Submission?
+    /// Live submission per channel.
+    private var submissions: [String: Submission] = [:]
+    /// Engine lane: at most one engine call runs at a time, whichever channel it serves.
+    private var laneBusy = false
+    private var laneWaiters: [(channel: String, continuation: CheckedContinuation<Void, Never>)] = []
+    /// Channel whose waiting batch gets the engine lane first (the focused chat window).
+    private var preferredChannel: String?
     private var counters = TranslationServiceDiagnostics()
     private let logger = Logger(subsystem: TranslateLog.subsystem, category: "translate")
 
@@ -85,6 +100,7 @@ public actor TranslationService {
     }
 
     private struct Submission {
+        let channel: String
         let generation: UInt64
         let continuation: AsyncStream<TranslationOutcome>.Continuation
         let stopwatch: Stopwatch
@@ -112,19 +128,28 @@ public actor TranslationService {
         self.engineTimeout = engineTimeout > .zero ? engineTimeout : .seconds(10)
     }
 
-    /// Changing the target cancels pending work. The cache key includes the target, so no flush is needed.
+    /// Changing the target cancels pending work on every channel. The cache key includes the target, so no
+    /// flush is needed.
     public func setTarget(_ target: Locale.Language) {
         guard target != self.target else { return }
-        cancelCurrent()
+        cancelAllChannels()
         self.target = target
     }
 
-    /// Changing the source cancels pending work (the source is part of the cache key).
+    /// Changing the source cancels pending work on every channel (the source is part of the cache key).
     public func setSource(_ source: Locale.Language) {
         guard source != self.source else { return }
-        cancelCurrent()
+        cancelAllChannels()
         self.source = source
     }
+
+    /// The channel whose batches go first when several channels wait for the engine (nil = arrival order).
+    public func setPreferredChannel(_ channel: String?) {
+        preferredChannel = channel
+    }
+
+    /// Number of channels with a live submission (numbers only, for diagnostics).
+    public var activeChannelCount: Int { submissions.count }
 
     public func status() async -> EngineStatus {
         await engine.status(source: source, target: target)
@@ -150,11 +175,15 @@ public actor TranslationService {
         return message.assemble(translations: values)
     }
 
-    /// Submit the current visible set, highest priority first (callers pass newest-first).
-    /// Messages with `kind.needsTranslation == false` are ignored. Work from earlier submissions that is not
-    /// part of this set is cancelled. Outcomes stream as they complete; the stream finishes when all are done.
-    public func submit(_ messages: [PreprocessedMessage]) -> AsyncStream<TranslationOutcome> {
-        cancelCurrent()
+    /// Submit the current visible set of one channel, highest priority first (callers pass newest-first).
+    /// Messages with `kind.needsTranslation == false` are ignored. The previous submission on the same channel
+    /// is cancelled (work it started keeps filling the cache); other channels are not affected. Texts already
+    /// in flight for any channel are awaited, not sent again. Outcomes stream as they complete; the stream
+    /// finishes when all are done.
+    public func submit(_ messages: [PreprocessedMessage],
+                       channel: String = TranslationService.defaultChannel) -> AsyncStream<TranslationOutcome> {
+        cancel(channel: channel)
+        generation &+= 1
         let gen = generation
         let stopwatch = Stopwatch()
         let (stream, continuation) = AsyncStream.makeStream(of: TranslationOutcome.self)
@@ -203,22 +232,32 @@ public actor TranslationService {
             return stream
         }
         continuation.onTermination = { _ in
-            Task { await self.streamTerminated(generation: gen) }
+            Task { await self.streamTerminated(channel: channel, generation: gen) }
         }
-        var submission = Submission(generation: gen, continuation: continuation, stopwatch: stopwatch,
+        var submission = Submission(channel: channel, generation: gen, continuation: continuation,
+                                    stopwatch: stopwatch,
                                     source: source, target: target, pending: pending, resolved: resolved,
                                     needed: Set(pending.flatMap(\.keys)), driver: nil)
         if !queue.isEmpty {
-            submission.driver = Task { await self.drive(generation: gen, queue: queue, itemIDs: itemIDs) }
+            submission.driver = Task {
+                await self.drive(channel: channel, generation: gen, queue: queue, itemIDs: itemIDs)
+            }
         }
-        current = submission
+        submissions[channel] = submission
         return stream
     }
 
-    /// Cancels the current submission: its stream finishes and not-yet-started batches are dropped.
+    /// Cancels the submissions of every channel: their streams finish and not-yet-started batches are dropped.
     /// Engine calls already running may complete and still fill the cache.
     public func cancelAll() {
-        cancelCurrent()
+        cancelAllChannels()
+    }
+
+    /// Cancels the submission of one channel only.
+    public func cancel(channel: String) {
+        guard let sub = submissions.removeValue(forKey: channel) else { return }
+        sub.driver?.cancel()
+        sub.continuation.finish()
     }
 
     public func clearCache() {
@@ -232,28 +271,21 @@ public actor TranslationService {
                             target: target.maximalIdentifier, text: text)
     }
 
-    private func cancelCurrent() {
-        generation &+= 1
-        guard let sub = current else { return }
-        current = nil
-        sub.driver?.cancel()
-        sub.continuation.finish()
+    private func cancelAllChannels() {
+        for channel in Array(submissions.keys) { cancel(channel: channel) }
     }
 
-    private func finishCurrent() {
-        guard let sub = current else { return }
-        current = nil
-        sub.driver?.cancel()
-        sub.continuation.finish()
+    private func isCurrent(channel: String, generation gen: UInt64) -> Bool {
+        submissions[channel]?.generation == gen
     }
 
-    private func streamTerminated(generation gen: UInt64) {
-        // The consumer went away (or we finished it ourselves, in which case `current` is already gone).
-        guard let sub = current, sub.generation == gen else { return }
-        cancelCurrent()
+    private func streamTerminated(channel: String, generation gen: UInt64) {
+        // The consumer went away (or we finished it ourselves, in which case the submission is already gone).
+        guard isCurrent(channel: channel, generation: gen) else { return }
+        cancel(channel: channel)
     }
 
-    private func drive(generation gen: UInt64, queue: [TranslationCacheKey],
+    private func drive(channel: String, generation gen: UInt64, queue: [TranslationCacheKey],
                        itemIDs: [TranslationCacheKey: String]) async {
         if batchWindowMilliseconds > 0 {
             // Collect window: a resubmit during this time cancels us before anything is sent.
@@ -261,7 +293,7 @@ public actor TranslationService {
         }
         var index = 0
         while index < queue.count {
-            guard gen == generation, !Task.isCancelled, let sub = current, sub.generation == gen else { return }
+            guard !Task.isCancelled, let sub = submissions[channel], sub.generation == gen else { return }
             var batch: [TranslationCacheKey] = []
             while index < queue.count, batch.count < batchSize {
                 let k = queue[index]
@@ -270,8 +302,43 @@ public actor TranslationService {
                 batch.append(k)
             }
             if batch.isEmpty { continue }
-            await runBatch(batch, itemIDs: itemIDs, source: sub.source, target: sub.target)
+            await acquireLane(channel: channel)
+            // Another channel's call may have resolved (or started) some of these texts while we waited.
+            guard !Task.isCancelled, let fresh = submissions[channel], fresh.generation == gen else {
+                releaseLane()
+                return
+            }
+            batch.removeAll { fresh.resolved[$0] != nil || inFlight.contains($0) || !fresh.needed.contains($0) }
+            if batch.isEmpty {
+                releaseLane()
+                continue
+            }
+            await runBatch(batch, itemIDs: itemIDs, source: fresh.source, target: fresh.target)
+            releaseLane()
         }
+    }
+
+    // MARK: - Engine lane
+
+    private func acquireLane(channel: String) async {
+        guard laneBusy else {
+            laneBusy = true
+            return
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            laneWaiters.append((channel, continuation))
+        }
+        // Ownership was handed over by `releaseLane` (laneBusy stayed true).
+    }
+
+    private func releaseLane() {
+        guard !laneWaiters.isEmpty else {
+            laneBusy = false
+            return
+        }
+        let index = preferredChannel.flatMap { p in laneWaiters.firstIndex { $0.channel == p } } ?? 0
+        let next = laneWaiters.remove(at: index)
+        next.continuation.resume()
     }
 
     private func runBatch(_ keys: [TranslationCacheKey], itemIDs: [TranslationCacheKey: String],
@@ -312,34 +379,45 @@ public actor TranslationService {
         deliver(successes: successes, failed: failed, error: failure)
     }
 
-    /// Applies batch results to the current submission and yields every message that became complete.
+    /// Applies batch results to every live submission (any channel) that needs them and yields every message
+    /// that became complete.
     private func deliver(successes: [TranslationCacheKey: String], failed: Set<TranslationCacheKey>,
                          error: TranslationEngineError) {
-        guard var sub = current else { return }
-        var touched = false
-        for (k, v) in successes where sub.needed.contains(k) {
-            sub.resolved[k] = v
-            touched = true
-        }
-        if !touched && failed.isDisjoint(with: sub.needed) { return }
-
-        var remaining: [PendingMessage] = []
-        for p in sub.pending {
-            if p.keys.contains(where: failed.contains) {
-                yield(TranslationOutcome(id: p.message.message.id, text: nil, error: error, fromCache: false,
-                                         latencyMilliseconds: sub.stopwatch.elapsedMilliseconds),
-                      to: sub.continuation)
-            } else if p.keys.allSatisfy({ sub.resolved[$0] != nil }) {
-                yield(outcome(for: p.message, keys: p.keys, resolved: sub.resolved, fromCache: false,
-                              stopwatch: sub.stopwatch), to: sub.continuation)
-            } else {
-                remaining.append(p)
+        var finished: [String] = []
+        for channel in Array(submissions.keys) {
+            guard var sub = submissions[channel] else { continue }
+            var touched = false
+            for (k, v) in successes where sub.needed.contains(k) {
+                sub.resolved[k] = v
+                touched = true
             }
+            if !touched && failed.isDisjoint(with: sub.needed) { continue }
+
+            var remaining: [PendingMessage] = []
+            for p in sub.pending {
+                if p.keys.contains(where: failed.contains) {
+                    yield(TranslationOutcome(id: p.message.message.id, text: nil, error: error, fromCache: false,
+                                             latencyMilliseconds: sub.stopwatch.elapsedMilliseconds),
+                          to: sub.continuation)
+                } else if p.keys.allSatisfy({ sub.resolved[$0] != nil }) {
+                    yield(outcome(for: p.message, keys: p.keys, resolved: sub.resolved, fromCache: false,
+                                  stopwatch: sub.stopwatch), to: sub.continuation)
+                } else {
+                    remaining.append(p)
+                }
+            }
+            sub.pending = remaining
+            sub.needed = Set(remaining.flatMap(\.keys))
+            submissions[channel] = sub
+            if remaining.isEmpty { finished.append(channel) }
         }
-        sub.pending = remaining
-        sub.needed = Set(remaining.flatMap(\.keys))
-        current = sub
-        if remaining.isEmpty { finishCurrent() }
+        for channel in finished { finish(channel: channel) }
+    }
+
+    private func finish(channel: String) {
+        guard let sub = submissions.removeValue(forKey: channel) else { return }
+        sub.driver?.cancel()
+        sub.continuation.finish()
     }
 
     private func outcome(for m: PreprocessedMessage, keys: [TranslationCacheKey],

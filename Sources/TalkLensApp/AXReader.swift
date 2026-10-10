@@ -132,78 +132,179 @@ enum AXQuickRead {
     }
 }
 
+/// One KakaoTalk chat window found by `AXReader.enumerateChatWindows()`.
+struct ChatWindowInfo: Sendable {
+    let window: AXElementRef
+    let key: AXElementKey
+    /// Frame in AX coordinates at enumeration time.
+    let frame: CGRect?
+}
+
+/// Open chat windows of KakaoTalk (not minimized), in the application's window order.
+struct ChatWindowEnumeration: Sendable {
+    var chatWindows: [ChatWindowInfo]
+    /// KakaoTalk's focused window when it is one of `chatWindows`.
+    var focused: AXElementKey?
+    /// Windows whose chat-window test was negative but may change (e.g. still loading): worth re-checking.
+    var unresolved: Int
+}
+
+enum EnumerationOutcome: Sendable {
+    case windows(ChatWindowEnumeration)
+    case failure(KakaoReadError)
+}
+
 actor AXReader {
     private let queue = DispatchSerialQueue(label: "dev.lipper.TalkLens.ax-reader", qos: .userInitiated)
     nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
 
-    /// Elements used by the cheap poll, remembered from the last successful full read.
+    /// Elements used by the cheap probe of one window, remembered from its last successful full read.
     private struct ProbeTarget {
         let window: AXElementRef
         let table: AXElementRef
         let rowsAttribute: String
     }
 
+    private struct WindowState {
+        var lastStartedAt: ContinuousClock.Instant?
+        var lastOutcome: ReadOutcome?
+        var probeTarget: ProbeTarget?
+        var lastSignature: ContentSignature?
+    }
+
     private let parser: TranscriptParser
     /// Kept for API compatibility: every read now covers all loaded rows (incremental), so the inline
     /// overlay's margin no longer changes what is read.
     private var inlineMargin = false
-    /// Row caches of recently followed chat windows, most recently used last.
+    /// Row caches of recently read chat windows, most recently used last (one per followed window, plus a few
+    /// for windows that were followed recently, e.g. before a Space switch).
     private var rowCaches: [(window: AXElementKey, cache: TranscriptRowCache<LiveAXNode>)] = []
-    static let maxRowCaches = 4
-    /// Memoised chat-window test per window element (`isChatWindow` scans the window's tree). Only stable
-    /// answers are kept: "chat window" and "main window"; other negatives are re-evaluated.
+    static let maxRowCaches = 8
+    /// Memoised chat-window test per window element (`isChatWindow` scans the window's tree). Stable answers
+    /// are kept: "chat window", "main window", "not a window". Other negatives (a chat window that is still
+    /// loading looks like a non-chat window) are re-tested with exponential backoff, so a window that is not a
+    /// chat window (profile, image viewer, settings) is not scanned again and again.
     private var windowKinds: [AXElementKey: Bool] = [:]
-    private var lastStartedAt: ContinuousClock.Instant?
-    private var lastOutcome: ReadOutcome?
-    private var probeTarget: ProbeTarget?
-    private var lastSignature: ContentSignature?
+    private var transientNegatives: [AXElementKey: (retryAt: ContinuousClock.Instant, misses: Int)] = [:]
+    static let negativeRetryInterval: Duration = .seconds(2)
+    static let maxNegativeRetryInterval: Duration = .seconds(60)
+    /// Windows smaller than this are popovers / tooltips, never chat windows (no tree scan).
+    static let minChatWindowSide: CGFloat = 200
+    private var windowStates: [AXElementKey: WindowState] = [:]
     private(set) var coalescedCount = 0
 
     init(parser: TranscriptParser = TranscriptParser()) {
         self.parser = parser
     }
 
-    /// Reads the current chat window. Requests made before an already-started read began (i.e. queued
-    /// behind it) are answered with that read's result instead of reading again.
-    func read(requestedAt: ContinuousClock.Instant) -> ReadOutcome {
-        if let started = lastStartedAt, started >= requestedAt, let cached = lastOutcome {
+    // MARK: - Enumeration
+
+    /// Every open (not minimized) chat window. IPC: the window list, the focused window, one batched
+    /// geometry read per window, and a (memoised, bounded) chat-window test for windows not seen before.
+    func enumerateChatWindows() -> EnumerationOutcome {
+        guard KakaoProcess.isAccessibilityTrusted else { return .failure(.notTrusted) }
+        guard let app = KakaoProcess.applicationNode() else { return .failure(.notRunning) }
+        // A failed window-list read (busy KakaoTalk, IPC timeout) must not look like "every window closed".
+        guard AXQuickRead.count(app.element, "AXWindows") != nil else { return .failure(.noChatWindow) }
+        let now = ContinuousClock.now
+        var result = ChatWindowEnumeration(chatWindows: [], focused: nil, unresolved: 0)
+        var present = Set<AXElementKey>()
+        for window in app.windows {
+            let key = window.elementIdentity
+            present.insert(key)
+            let g = window.currentGeometry()
+            if g.isMinimized { continue }
+            switch chatKind(window, key: key, frame: g.frame, now: now) {
+            case .chat:
+                result.chatWindows.append(ChatWindowInfo(window: AXElementRef(element: window.element), key: key,
+                                                         frame: g.frame))
+            case .notChat:
+                break
+            case .unknown:
+                result.unresolved += 1
+            }
+        }
+        if let focused = app.focusedWindow?.elementIdentity,
+           result.chatWindows.contains(where: { $0.key == focused }) {
+            result.focused = focused
+        }
+        // Forget windows that no longer exist (closed): memo entries, and the row caches / last outcomes that
+        // hold their chat content in memory.
+        windowKinds = windowKinds.filter { present.contains($0.key) }
+        transientNegatives = transientNegatives.filter { present.contains($0.key) }
+        windowStates = windowStates.filter { present.contains($0.key) }
+        rowCaches.removeAll { !present.contains($0.window) }
+        return .windows(result)
+    }
+
+    private enum ChatKind { case chat, notChat, unknown }
+
+    private func chatKind(_ window: LiveAXNode, key: AXElementKey, frame: CGRect?,
+                          now: ContinuousClock.Instant) -> ChatKind {
+        if let known = windowKinds[key] { return known ? .chat : .notChat }
+        if let negative = transientNegatives[key], now < negative.retryAt { return .unknown }
+        if let role = window.role, role != AXRole.window {
+            windowKinds[key] = false
+            return .notChat
+        }
+        if let frame, frame.width < Self.minChatWindowSide || frame.height < Self.minChatWindowSide {
+            noteNegative(key, now: now)
+            return .unknown
+        }
+        if KakaoChatReader.isMainWindow(window) {
+            windowKinds[key] = false
+            return .notChat
+        }
+        if KakaoChatReader.isChatWindow(window) {
+            if windowKinds.count > 64 { windowKinds.removeAll() }
+            windowKinds[key] = true
+            transientNegatives[key] = nil
+            return .chat
+        }
+        noteNegative(key, now: now)
+        return .unknown
+    }
+
+    private func noteNegative(_ key: AXElementKey, now: ContinuousClock.Instant) {
+        let misses = (transientNegatives[key]?.misses ?? 0) + 1
+        let delay = min(Self.negativeRetryInterval * (1 << min(misses - 1, 5)), Self.maxNegativeRetryInterval)
+        transientNegatives[key] = (now + delay, misses)
+    }
+
+    // MARK: - Reads
+
+    /// Reads one chat window. Requests made before an already-started read of the same window began (i.e.
+    /// queued behind it) are answered with that read's result instead of reading again.
+    func read(window: AXElementRef, requestedAt: ContinuousClock.Instant) -> ReadOutcome {
+        let key = AXElementKey(window.element)
+        if let state = windowStates[key], let started = state.lastStartedAt, started >= requestedAt,
+           let cached = state.lastOutcome {
             coalescedCount += 1
             return cached
         }
         let started = ContinuousClock.now
-        let outcome = performRead()
-        lastStartedAt = started
-        lastOutcome = outcome
+        let outcome = performRead(window: window, key: key)
+        windowStates[key, default: WindowState()].lastStartedAt = started
+        windowStates[key, default: WindowState()].lastOutcome = outcome
         return outcome
     }
 
-    /// Resolves the current chat window and its geometry without touching the transcript.
-    func resolveWindow() -> ReadOutcome {
+    /// Geometry of one window without touching the transcript (used while paused).
+    func resolveWindow(_ window: AXElementRef) -> ReadOutcome {
         guard KakaoProcess.isAccessibilityTrusted else { return .failure(.notTrusted, window: nil) }
-        guard let app = KakaoProcess.applicationNode() else { return .failure(.notRunning, window: nil) }
-        guard let window = currentChatWindow(app: app) else {
-            return .failure(.noChatWindow, window: nil)
+        guard KakaoProcess.applicationNode() != nil else { return .failure(.notRunning, window: nil) }
+        guard let geometry = AXQuickRead.windowGeometry(window.element) else {
+            return .failure(.noChatWindow, window: window)
         }
-        let ref = AXElementRef(element: window.element)
-        let geometry = AXQuickRead.windowGeometry(window.element) ?? WindowGeometry(frame: nil, minimized: false)
-        return .windowOnly(ref, geometry)
+        return .windowOnly(window, geometry)
     }
 
-    /// Cheap change check (a handful of IPC round-trips, no tree walk) against the last full read.
-    func probe() -> ProbeResult {
-        guard let target = probeTarget, let previous = lastSignature,
+    /// Cheap change check of one window (a handful of IPC round-trips, no tree walk) against its last read.
+    func probe(window: AXElementRef) -> ProbeResult {
+        let key = AXElementKey(window.element)
+        guard let state = windowStates[key], let target = state.probeTarget, let previous = state.lastSignature,
               let now = Self.signature(target) else { return .unknown }
         return now == previous ? .unchanged : .changed
-    }
-
-    /// True when the chat window TalkLens should follow differs from `current` (used after app-level
-    /// AXWindowCreated, which tooltips and popovers also emit). The focused-window check is one IPC.
-    func chatWindowChanged(from current: AXElementRef?) -> Bool {
-        guard KakaoProcess.isAccessibilityTrusted, let app = KakaoProcess.applicationNode() else { return true }
-        if let current, let focused = app.focusedWindow, CFEqual(focused.element, current.element) { return false }
-        guard let window = currentChatWindow(app: app) else { return current != nil }
-        guard let current else { return true }
-        return !CFEqual(window.element, current.element)
     }
 
     /// No effect on what is read any more (all loaded rows are read incrementally); kept for callers.
@@ -211,32 +312,20 @@ actor AXReader {
         inlineMargin = enabled
     }
 
-    /// Drops the cached outcome and the row caches (they hold chat content in memory) and the probe state.
-    func clear() {
-        lastOutcome = nil
-        lastStartedAt = nil
-        probeTarget = nil
-        lastSignature = nil
-        rowCaches.removeAll()
-        windowKinds.removeAll()
+    /// Forgets everything about one window (it was closed): row cache (chat content), probe and memo state.
+    func dropWindow(_ key: AXElementKey) {
+        rowCaches.removeAll { $0.window == key }
+        windowStates[key] = nil
+        windowKinds[key] = nil
+        transientNegatives[key] = nil
     }
 
-    /// Current chat window, with the chat-window test memoised per element.
-    private func currentChatWindow(app: LiveAXNode) -> LiveAXNode? {
-        KakaoChatReader.currentChatWindow(app: app) { window in
-            let key = window.elementIdentity
-            if let known = windowKinds[key] { return known }
-            if KakaoChatReader.isMainWindow(window) {
-                windowKinds[key] = false
-                return false
-            }
-            let isChat = KakaoChatReader.isChatWindow(window)
-            if isChat {
-                if windowKinds.count > 64 { windowKinds.removeAll() }
-                windowKinds[key] = true
-            }
-            return isChat
-        }
+    /// Drops the cached outcomes and the row caches (they hold chat content in memory) and the probe state.
+    func clear() {
+        windowStates.removeAll()
+        rowCaches.removeAll()
+        windowKinds.removeAll()
+        transientNegatives.removeAll()
     }
 
     /// Row cache for `window` (created on first use; least recently used caches are dropped).
@@ -252,16 +341,15 @@ actor AXReader {
         return cache
     }
 
-    private func performRead() -> ReadOutcome {
-        guard KakaoProcess.isAccessibilityTrusted else { return fail(.notTrusted, window: nil) }
-        guard let app = KakaoProcess.applicationNode() else { return fail(.notRunning, window: nil) }
-        guard let window = currentChatWindow(app: app) else { return fail(.noChatWindow, window: nil) }
-        let windowRef = AXElementRef(element: window.element)
+    private func performRead(window windowRef: AXElementRef, key: AXElementKey) -> ReadOutcome {
+        guard KakaoProcess.isAccessibilityTrusted else { return fail(.notTrusted, window: nil, key: key) }
+        guard KakaoProcess.applicationNode() != nil else { return fail(.notRunning, window: nil, key: key) }
+        let window = LiveAXNode(windowRef.element)
         // Fingerprint taken *before* parsing: if the transcript changes during the parse, the next probe sees
         // a difference and triggers another read instead of silently missing it.
-        let previousTarget = probeTarget.flatMap { $0.window.isSame(as: windowRef) ? $0 : nil }
+        let previousTarget = windowStates[key]?.probeTarget
         let preSignature = previousTarget.flatMap(Self.signature)
-        let cache = rowCache(for: window.elementIdentity)
+        let cache = rowCache(for: key)
         do {
             // Incremental: only rows not analysed before (or lazily loaded / resized) cost a subtree walk.
             let result = try KakaoChatReader.read(window: window, cache: cache, parser: parser)
@@ -269,42 +357,48 @@ actor AXReader {
             let tableNode = cache.lastTable ?? TranscriptLocator.locate(inWindow: window)
                 .flatMap { KakaoChatReader.firstTable(under: $0.transcriptRoot) }
             let table = tableNode.map { AXElementRef(element: $0.element) }
-            updateProbeTarget(window: windowRef, table: table, previous: previousTarget, preSignature: preSignature)
+            updateProbeTarget(key: key, window: windowRef, table: table, previous: previousTarget,
+                              preSignature: preSignature)
             let anchor = tableNode.flatMap { Self.scrollAnchor(table: $0, read: result) }
             return .read(result, window: windowRef, table: table, anchor: anchor)
-        } catch let error as KakaoReadError {
-            return fail(error, window: windowRef)
         } catch {
-            return fail(.transcriptNotFound, window: windowRef)
+            // A window that no longer answers a geometry read is gone (closed meanwhile).
+            if AXQuickRead.windowGeometry(windowRef.element)?.frame == nil {
+                return fail(.noChatWindow, window: windowRef, key: key)
+            }
+            let readError = (error as? KakaoReadError) ?? .transcriptNotFound
+            return fail(readError, window: windowRef, key: key)
         }
     }
 
-    private func fail(_ error: KakaoReadError, window: AXElementRef?) -> ReadOutcome {
-        probeTarget = nil
-        lastSignature = nil
+    private func fail(_ error: KakaoReadError, window: AXElementRef?, key: AXElementKey) -> ReadOutcome {
+        windowStates[key]?.probeTarget = nil
+        windowStates[key]?.lastSignature = nil
         return .failure(error, window: window)
     }
 
-    private func updateProbeTarget(window: AXElementRef, table: AXElementRef?, previous: ProbeTarget?,
-                                   preSignature: ContentSignature?) {
+    private func updateProbeTarget(key: AXElementKey, window: AXElementRef, table: AXElementRef?,
+                                   previous: ProbeTarget?, preSignature: ContentSignature?) {
+        var state = windowStates[key] ?? WindowState()
+        defer { windowStates[key] = state }
         guard let table else {
-            probeTarget = nil
-            lastSignature = nil
+            state.probeTarget = nil
+            state.lastSignature = nil
             return
         }
         if let previous, previous.table.isSame(as: table), let preSignature {
-            probeTarget = ProbeTarget(window: window, table: table, rowsAttribute: previous.rowsAttribute)
-            lastSignature = preSignature
+            state.probeTarget = ProbeTarget(window: window, table: table, rowsAttribute: previous.rowsAttribute)
+            state.lastSignature = preSignature
             return
         }
         guard let attribute = AXQuickRead.rowsAttribute(of: table.element) else {
-            probeTarget = nil
-            lastSignature = nil
+            state.probeTarget = nil
+            state.lastSignature = nil
             return
         }
         let target = ProbeTarget(window: window, table: table, rowsAttribute: attribute)
-        probeTarget = target
-        lastSignature = Self.signature(target)
+        state.probeTarget = target
+        state.lastSignature = Self.signature(target)
     }
 
     private static func signature(_ target: ProbeTarget) -> ContentSignature? {

@@ -18,8 +18,8 @@ enum SelfCheck {
         let model = SidebarViewModel(service: service, glossary: glossary.merged, settings: settings,
                                      diagnostics: diagnostics)
         // Constructed (not started) to make sure the live components initialise without side effects.
-        let tracker = WindowTracker(reader: AXReader(), diagnostics: diagnostics)
-        _ = tracker.state
+        let manager = SessionManager(reader: AXReader(), diagnostics: diagnostics)
+        _ = manager.state
 
         var fixtureState = "none"
         var parsed: [ParsedMessage] = []

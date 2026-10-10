@@ -22,6 +22,28 @@ enum TranslationClipboard {
     }
 }
 
+/// Which row model the sidebar shows: the focused chat window's, or an empty one carrying the app status
+/// when no chat window is followed.
+@MainActor
+@Observable
+final class SidebarModelHost {
+    var model: SidebarViewModel
+    init(model: SidebarViewModel) { self.model = model }
+}
+
+/// Sidebar root: swaps the whole view (and its scroll state) when the focused chat window changes.
+struct SidebarRootView: View {
+    let host: SidebarModelHost
+    let settings: AppSettings
+    let actions: SidebarActions
+
+    var body: some View {
+        let model = host.model
+        SidebarView(model: model, settings: settings, actions: actions)
+            .id(ObjectIdentifier(model))
+    }
+}
+
 struct SidebarView: View {
     let model: SidebarViewModel
     let settings: AppSettings

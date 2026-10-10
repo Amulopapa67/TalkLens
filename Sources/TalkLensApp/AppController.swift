@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-// Wires WindowTracker → SidebarViewModel → OverlayPanel (sidebar mode) / InlineOverlayController (inline
-// mode), and reacts to settings changes.
+// Wires SessionManager (one ChatSession per open chat window) → per-session SidebarViewModel /
+// InlineOverlayController, the sidebar panel (focused session only) and settings changes.
 
 import AppKit
 import ApplicationServices
@@ -21,26 +21,27 @@ final class AppController {
     let diagnostics: Diagnostics
     let glossaryStore: GlossaryStore
     let service: TranslationService
-    let model: SidebarViewModel
+    /// Row model shown by the sidebar while no chat window is followed (carries the app status only).
+    let idleModel: SidebarViewModel
+    let sidebarHost: SidebarModelHost
     let reader: AXReader
-    let tracker: WindowTracker
+    let manager: SessionManager
     let loginItem: LoginItemController
     let presenter = WindowPresenter()
     private(set) var panel: PanelController?
-    private(set) var inline: InlineOverlayController?
+    /// Shared NSEvent monitors of all inline overlays.
+    private let eventHub = InlineEventHub()
     private var onboardingModel: OnboardingModel?
     private var screenObserver: NSObjectProtocol?
     private var statsTask: Task<Void, Never>?
-    /// Which parts of the followed chat window other windows cover (inline mode only).
-    private let occlusion = WindowOcclusion()
-    private var occlusionState: OcclusionSnapshot = .notOnScreen
+    private var engineStatus: EngineStatus?
     private var occlusionTask: Task<Void, Never>?
     private var occlusionInterval: Duration?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var occlusionRecheckTask: Task<Void, Never>?
     private var kakaoPID: pid_t?
-    /// Occlusion is re-checked this often while the overlay is shown (other apps' windows move without any
-    /// notification to us), and at the slow rate while it could be shown but the chat window is hidden.
+    /// Occlusion is re-checked this often while an overlay is shown (other apps' windows move without any
+    /// notification to us), and at the slow rate while one could be shown but its chat window is hidden.
     static let occlusionInterval: Duration = .milliseconds(250)
     static let occlusionIdleInterval: Duration = .seconds(1)
 
@@ -50,12 +51,16 @@ final class AppController {
         diagnostics = Diagnostics()
         glossaryStore = GlossaryStore(bundle: .main, loadUser: true)
         service = TranslationService(engine: engine, target: settings.targetLocale)
-        model = SidebarViewModel(service: service, glossary: glossaryStore.merged, settings: settings,
-                                 diagnostics: diagnostics)
+        idleModel = SidebarViewModel(service: service, glossary: glossaryStore.merged, settings: settings,
+                                     diagnostics: diagnostics, channel: "idle")
+        sidebarHost = SidebarModelHost(model: idleModel)
         reader = AXReader()
-        tracker = WindowTracker(reader: reader, diagnostics: diagnostics)
+        manager = SessionManager(reader: reader, diagnostics: diagnostics)
         loginItem = LoginItemController()
     }
+
+    /// The models of every followed chat window plus the idle model.
+    private var allModels: [SidebarViewModel] { [idleModel] + manager.sessions.map(\.model) }
 
     func start() {
         // Client-side default IPC timeout for every AX element we message (the 6 s system default would let a
@@ -66,27 +71,30 @@ final class AppController {
             openSettings: { [weak self] in self?.showSettings() },
             resume: { [weak self] in self?.settings.paused = false }
         )
-        panel = PanelController(rootView: SidebarView(model: model, settings: settings, actions: actions),
+        panel = PanelController(rootView: SidebarRootView(host: sidebarHost, settings: settings, actions: actions),
                                 settings: settings)
-        inline = InlineOverlayController(model: model, tracker: tracker, diagnostics: diagnostics)
+        eventHub.overlays = { [weak self] in
+            guard let self else { return [] }
+            // Focused window first: when occlusion data lags, a scroll goes to the window most likely on top.
+            let focused = self.manager.focusedSession
+            let ordered = self.manager.sessions.sorted { a, b in (a === focused) && !(b === focused) }
+            return ordered.map(\.inline).filter(\.active)
+        }
 
         settings.onChange = { [weak self] key in self?.settingChanged(key) }
-        tracker.onStateChange = { [weak self] state in self?.trackerStateChanged(state) }
-        tracker.onRead = { [weak self] read, triggeredAt in
-            guard let self else { return }
-            self.model.ingest(read, triggeredAt: triggeredAt)
-            self.inline?.ingest(read, anchor: self.tracker.scrollAnchor)
-        }
-        tracker.onGeometry = { [weak self] geometry in self?.geometryChanged(geometry) }
-        tracker.onFrontmostChange = { [weak self] _ in self?.updatePanelVisibility() }
-        tracker.onTranscriptRowsChanged = { [weak self] in self?.inline?.transcriptRowsChanged() }
+        manager.makeModel = { [weak self] channel in self?.makeModel(channel: channel) }
+        manager.onStateChange = { [weak self] state in self?.managerStateChanged(state) }
+        manager.onSessionsChanged = { [weak self] in self?.sessionsChanged() }
+        manager.onSessionGeometry = { [weak self] session in self?.geometryChanged(session) }
+        manager.onSessionStateChange = { [weak self] _ in self?.updatePanelVisibility() }
+        manager.onFrontmostChange = { [weak self] _ in self?.updatePanelVisibility() }
         applyDisplayModeToReader()
-        occlusion.warmUp()
+        WindowOcclusion().warmUp()
         subscribeWindowOrderChanges()
 
-        model.setPaused(settings.paused)
-        tracker.setPaused(settings.paused)
-        tracker.start()
+        idleModel.setPaused(settings.paused)
+        manager.setPaused(settings.paused)
+        manager.start()
         updatePanelVisibility()
 
         screenObserver = NotificationCenter.default.addObserver(
@@ -97,11 +105,26 @@ final class AppController {
 
         Task { [weak self] in
             guard let self else { return }
-            await self.model.refreshEngineStatus()
+            await self.refreshEngineStatus()
             self.maybeShowOnboarding()
         }
         logger.info("started glossary=\(self.glossaryStore.merged.entries.count)")
         startStatsLogging()
+    }
+
+    private func makeModel(channel: String) -> SidebarViewModel {
+        let model = SidebarViewModel(service: service, glossary: glossaryStore.merged, settings: settings,
+                                     diagnostics: diagnostics, channel: channel)
+        model.setEngineStatus(engineStatus)
+        model.setPaused(settings.paused)
+        return model
+    }
+
+    /// Checks the translation engine once and shares the result with every model.
+    private func refreshEngineStatus() async {
+        let status = await service.status()
+        engineStatus = status
+        for model in allModels { model.setEngineStatus(status) }
     }
 
     /// Every 30 s, log the in-memory timing summary (numbers only) so PERF.md can be filled from `log show`.
@@ -124,8 +147,8 @@ final class AppController {
         occlusionInterval = nil
         occlusionRecheckTask?.cancel()
         occlusionRecheckTask = nil
-        tracker.stop()
-        inline?.stop()
+        manager.stop()
+        eventHub.setEnabled(false)
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
         for token in workspaceObservers { NSWorkspace.shared.notificationCenter.removeObserver(token) }
@@ -137,39 +160,50 @@ final class AppController {
         }
     }
 
-    // MARK: - Tracker → panel / model
+    // MARK: - Sessions → panel / overlays
 
-    private func trackerStateChanged(_ state: WindowTracker.State) {
+    private func managerStateChanged(_ state: SessionManager.State) {
         let status: SidebarViewModel.Status
         switch state {
         case .idle: status = .starting
         case .noPermission: status = .noPermission
         case .kakaoNotRunning: status = .kakaoNotRunning
         case .noChatWindow: status = .noChatWindow
-        case .transcriptNotFound: status = .transcriptNotFound
-        case .tracking: status = .active
+        case .tracking: status = .starting
         }
-        model.setTrackerStatus(status)
-        if state == .noChatWindow || state == .kakaoNotRunning || state == .noPermission {
-            panel?.place(windowAX: nil, inputAX: nil)
-        }
+        idleModel.setTrackerStatus(status)
+        if state != .tracking { panel?.place(windowAX: nil, inputAX: nil) }
         updatePanelVisibility()
     }
 
-    private func geometryChanged(_ geometry: WindowTracker.Geometry) {
-        guard let panel else { return }
-        panel.place(windowAX: geometry.windowAX, inputAX: geometry.inputAX)
-        inline?.geometryChanged(geometry)
+    /// Sessions were created / ended or the focused one changed: the sidebar follows the focused session and
+    /// its translations get the engine first.
+    private func sessionsChanged() {
+        let focused = manager.focusedSession
+        let model = focused?.model ?? idleModel
+        if sidebarHost.model !== model { sidebarHost.model = model }
+        let g = focused?.geometry
+        panel?.place(windowAX: g?.windowAX, inputAX: g?.inputAX)
+        let channel = focused?.channel
+        Task { [service] in await service.setPreferredChannel(channel) }
         updatePanelVisibility()
-        if let stopwatch = geometry.stopwatch {
+    }
+
+    private func geometryChanged(_ session: ChatSession) {
+        guard let panel else { return }
+        let g = session.geometry
+        if session === manager.focusedSession { panel.place(windowAX: g.windowAX, inputAX: g.inputAX) }
+        session.inline.geometryChanged()
+        updatePanelVisibility()
+        if let stopwatch = g.stopwatch {
             diagnostics.recordFollow(stopwatch.elapsedMilliseconds)
         }
     }
 
     private func relayout() {
-        let g = tracker.geometry
-        panel?.place(windowAX: g.windowAX, inputAX: g.inputAX)
-        inline?.screensChanged()
+        let g = manager.focusedSession?.geometry
+        panel?.place(windowAX: g?.windowAX, inputAX: g?.inputAX)
+        for session in manager.sessions { session.inline.screensChanged() }
         updatePanelVisibility()
     }
 
@@ -177,49 +211,55 @@ final class AppController {
 
     func updatePanelVisibility() {
         guard let panel else { return }
-        let front = tracker.kakaoFrontmost
+        let front = manager.kakaoFrontmost
         let inlineMode = isInlineMode
-        let g = tracker.geometry
-        // The overlay can only sit over a tracked, non-minimized chat window while translation runs.
-        let overlayCandidate = inlineMode && settings.sidebarVisible && !settings.paused && tracker.kakaoRunning
-            && tracker.state == .tracking && !g.minimized && g.windowAX != nil
-        refreshOcclusion(candidate: overlayCandidate)
-        let chatVisible = occlusionState.chatVisible
+        let running = manager.kakaoRunning
+        if !running { kakaoPID = nil }
+        // Overlays can only sit over chat windows while translation runs; one window-list snapshot (metadata
+        // only, no IPC to KakaoTalk) serves every session's occlusion.
+        let overlaysPossible = inlineMode && settings.sidebarVisible && !settings.paused && running
+            && !manager.sessions.isEmpty
+        let windows = overlaysPossible ? WindowOcclusion.onScreenWindows() : nil
+        if overlaysPossible, kakaoPID == nil { kakaoPID = KakaoProcess.processIdentifier }
+        let focused = manager.focusedSession
+        var anyCandidate = false
+        var anyShown = false
+        for session in manager.sessions {
+            let g = session.geometry
+            let candidate = overlaysPossible && !g.minimized && g.windowAX != nil
+            session.refreshOcclusion(windows: candidate ? windows : nil, kakaoPID: kakaoPID)
+            let chatVisible = session.occlusionState.chatVisible
+            // The overlay follows the chat window itself: it stays while any part of the window is on screen,
+            // even behind other apps — whatever covers it is masked out (WindowOcclusion).
+            let overlayActive = candidate && session.state == .tracking && chatVisible
+            session.inline.setActive(overlayActive)
+            let isFocused = session === focused
+            // Nothing is read or translated while nothing of it can be seen; the session reads once on return.
+            let wanted: Bool
+            if inlineMode {
+                wanted = settings.sidebarVisible && (chatVisible || (front && isFocused))
+            } else {
+                wanted = settings.sidebarVisible && isFocused && (front || settings.pinned)
+            }
+            session.setContentWanted(wanted)
+            anyCandidate = anyCandidate || candidate
+            anyShown = anyShown || overlayActive
+        }
+        manager.contentWantedChanged()
+        eventHub.setEnabled(anyShown)
         // `sidebarVisible` is the menu's "show translations" switch in both modes. The sidebar follows a
-        // frontmost KakaoTalk (or stays when pinned). The inline overlay follows the chat window itself: it
-        // stays while any part of the window is on screen, even behind other apps — whatever covers the chat
-        // window is masked out of the overlay (WindowOcclusion), so it never paints over other windows.
-        let wanted = settings.sidebarVisible && (front || (inlineMode ? chatVisible : settings.pinned))
-        var visible = !inlineMode && wanted && tracker.kakaoRunning && panel.placementValid
-        if g.minimized { visible = false }
+        // frontmost KakaoTalk (or stays when pinned) and shows the focused chat window.
+        let wantedPanel = settings.sidebarVisible && (front || settings.pinned)
+        var visible = !inlineMode && wantedPanel && running && panel.placementValid
+        if focused?.geometry.minimized == true { visible = false }
         panel.setVisible(visible, kakaoFrontmost: front)
-        let overlayActive = overlayCandidate && chatVisible
-        inline?.setActive(overlayActive)
-        // Nothing is read or translated while nothing can be seen; the tracker reads once on return.
-        tracker.setContentWanted(wanted)
-        scheduleOcclusionChecks(candidate: overlayCandidate, shown: overlayActive)
+        scheduleOcclusionChecks(candidate: anyCandidate, shown: anyShown)
     }
 
     // MARK: - Occlusion (inline mode)
 
-    /// Window-server metadata only; no IPC to KakaoTalk. Pushes changed occluder rects to the overlay.
-    private func refreshOcclusion(candidate: Bool) {
-        if !tracker.kakaoRunning { kakaoPID = nil }
-        let next: OcclusionSnapshot
-        if candidate, let frame = tracker.geometry.windowAX, let pid = kakaoPID ?? KakaoProcess.processIdentifier {
-            kakaoPID = pid
-            next = occlusion.update(kakaoPID: pid, chatFrame: frame)
-        } else {
-            if occlusion.last != .notOnScreen { occlusion.reset() }
-            next = .notOnScreen
-        }
-        guard next != occlusionState else { return }
-        occlusionState = next
-        inline?.setOccluders(next.occluders)
-    }
-
-    /// Other apps' windows move, open and close without telling us: re-check on a timer while the overlay is
-    /// shown (fast) or could be shown once the chat window is on screen again (slow).
+    /// Other apps' windows move, open and close without telling us: re-check on a timer while an overlay is
+    /// shown (fast) or could be shown once its chat window is on screen again (slow).
     private func scheduleOcclusionChecks(candidate: Bool, shown: Bool) {
         let interval: Duration? = candidate ? (shown ? Self.occlusionInterval : Self.occlusionIdleInterval) : nil
         guard interval != occlusionInterval else { return }
@@ -271,9 +311,14 @@ final class AppController {
     private func settingChanged(_ key: AppSettings.Key) {
         switch key {
         case .targetLanguage:
-            model.retarget(settings.targetLanguage)
+            for model in allModels { model.retarget(settings.targetLanguage) }
+            Task { [weak self] in
+                // After the retarget reached the service: the new pair may need a download.
+                try? await Task.sleep(for: .milliseconds(100))
+                await self?.refreshEngineStatus()
+            }
         case .glossaryEnabled:
-            model.updateGlossary(glossaryStore.merged)
+            for model in allModels { model.updateGlossary(glossaryStore.merged) }
         case .edge, .panelWidth:
             relayout()
         case .opacity:
@@ -285,14 +330,14 @@ final class AppController {
             logger.info("display mode=\(self.settings.displayMode.rawValue, privacy: .public)")
             applyDisplayModeToReader()
             updatePanelVisibility()
-            // Re-read with the new row margin (inline mode also parses rows just outside the viewport).
+            // Re-read so the overlays (or the sidebar) start from fresh frames.
             Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(50))
-                self?.tracker.requestRead()
+                self?.manager.requestReadAll()
             }
         case .paused:
-            model.setPaused(settings.paused)
-            tracker.setPaused(settings.paused)
+            for model in allModels { model.setPaused(settings.paused) }
+            manager.setPaused(settings.paused)
             updatePanelVisibility()
         case .fontSize, .showOriginal, .onboardingShown:
             break
@@ -301,14 +346,14 @@ final class AppController {
 
     func reloadGlossary() {
         glossaryStore.reload()
-        model.updateGlossary(glossaryStore.merged)
+        for model in allModels { model.updateGlossary(glossaryStore.merged) }
     }
 
     // MARK: - Windows
 
     private func maybeShowOnboarding() {
         let needsPermission = !AccessibilityAccess.isGranted
-        let needsLanguage = model.engineStatus == .needsDownload
+        let needsLanguage = engineStatus == .needsDownload
         if !settings.onboardingShown || needsPermission || needsLanguage {
             settings.onboardingShown = true
             showOnboarding()
@@ -317,9 +362,9 @@ final class AppController {
 
     func showOnboarding() {
         let onboarding = onboardingModel ?? OnboardingModel(service: service)
-        onboarding.onAccessibilityGranted = { [weak self] in self?.tracker.refreshAttachment() }
+        onboarding.onAccessibilityGranted = { [weak self] in self?.manager.refreshAttachment() }
         onboarding.onEngineStatus = { [weak self] _ in
-            Task { [weak self] in await self?.model.refreshEngineStatus() }
+            Task { [weak self] in await self?.refreshEngineStatus() }
         }
         onboardingModel = onboarding
         let target = settings.targetLocale
@@ -351,15 +396,18 @@ final class AppController {
     /// One-line, content-free status for the menu.
     var menuStatusLine: String {
         if settings.paused { return "状态：已暂停" }
-        switch tracker.state {
+        switch manager.state {
         case .idle: return "状态：启动中"
         case .noPermission: return "状态：需要辅助功能权限"
         case .kakaoNotRunning: return "状态：KakaoTalk 未运行"
         case .noChatWindow: return "状态：没有打开的聊天窗口"
-        case .transcriptNotFound: return "状态：未找到聊天记录区域"
         case .tracking:
-            let c = model.counts
-            return "状态：跟随中 · \(c.rows) 条 · 已译 \(c.done)"
+            guard let focused = manager.focusedSession else { return "状态：启动中" }
+            if focused.state == .transcriptNotFound { return "状态：未找到聊天记录区域" }
+            let c = focused.model.counts
+            let windows = manager.sessions.count
+            let prefix = windows > 1 ? "状态：跟随 \(windows) 个窗口 · 当前" : "状态：跟随中"
+            return "\(prefix) · \(c.rows) 条 · 已译 \(c.done)"
         }
     }
 }

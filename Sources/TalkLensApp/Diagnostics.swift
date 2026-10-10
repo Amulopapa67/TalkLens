@@ -33,6 +33,8 @@ final class Diagnostics {
     private(set) var overlayFastTrackTicks = 0
     /// Inline overlay: full reads applied to the overlay (re-anchoring labels to fresh frames).
     private(set) var overlayReanchors = 0
+    /// Chat windows currently followed (one session each).
+    private(set) var sessionCount = 0
 
     func recordFollow(_ ms: Double) { append(&followSamples, ms) }
     func recordTranslation(_ ms: Double) { append(&translationSamples, ms) }
@@ -56,6 +58,7 @@ final class Diagnostics {
     func recordSkippedHiddenRead() { skippedHiddenReadCount += 1 }
     func recordOverlayFastTrackTick() { overlayFastTrackTicks += 1 }
     func recordOverlayReanchor() { overlayReanchors += 1 }
+    func setSessionCount(_ count: Int) { sessionCount = count }
 
     var followStats: LatencyStats { LatencyStats(followSamples) }
     var translationStats: LatencyStats { LatencyStats(translationSamples) }
@@ -71,7 +74,7 @@ final class Diagnostics {
             + "reads=\(readCount) readFailures=\(readFailureCount) "
             + "axEvents=\(axEventCount) pollReads=\(pollReadCount) cheapPollChecks=\(cheapPollCheckCount) "
             + "skippedHiddenReads=\(skippedHiddenReadCount) overlayFastTrackTicks=\(overlayFastTrackTicks) "
-            + "overlayReanchors=\(overlayReanchors)"
+            + "overlayReanchors=\(overlayReanchors) sessions=\(sessionCount)"
     }
 
     private func append(_ samples: inout [Double], _ value: Double) {
