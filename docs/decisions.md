@@ -122,3 +122,17 @@
     - 消息结构：`AXCell → [AXButton 头像 36×36, AXStaticText 时间(help=日期), AXStaticText 发送者, AXStaticText 卡片标题, AXTextArea 正文, AXImage 卡片图标]`。正文外面没有包住它的气泡 AXImage。
   - 决定：找不到输入框时，退回去选"直接包含 AXTable、宽度 ≥ 窗口 60%、高度 ≥ 30% 的最大 AXScrollArea"，`inputFrame = nil`。带 friends/chatrooms/more 导航按钮的主窗口不走这条兜底。增量缓存会记住"这个窗口没有输入框"。
   - 日期：2026-10-10
+- **D-022 多窗口：每个打开的聊天窗口一个会话**
+  - 决定：
+    - SessionManager 取代 WindowTracker，为每个"打开、未最小化、在当前 Space 上"的 KakaoTalk 聊天窗口建一个 ChatSession，最多 6 个，最近获得焦点的优先。
+    - 每个会话各自有：AX 观察者、行缓存、行模型、覆盖层和遮挡遮罩（盖在上面的其它 KakaoTalk 窗口也算遮挡物）。
+    - 侧栏模式只显示焦点会话。
+  - 读取：全部经过同一个 AXReader 串行进行。焦点会话优先，其余按未被遮挡的面积排序。跟进读取轮流进行。兜底轮询只轮到可见的会话，合计 ≤ 2 次/秒。
+  - 翻译：
+    - `TranslationService.submit(_:channel:)` 只取消同一 channel 的上一次提交，缓存和进行中去重全局共享。
+    - 引擎调用全局一次一个，焦点 channel 优先（Apple Translation session 不宜并发）。
+  - 其它：
+    - "不是聊天窗口"的判断结果会缓存，按指数退避重试（2 s 到 60 s），并跳过小于 200 pt 的窗口。
+    - 行缓存上限 8 个窗口。
+  - 理由：Lipper 同时开着多个聊天窗口（含 OpenChat、商业账号），原来只翻当前焦点窗口。
+  - 日期：2026-10-10
