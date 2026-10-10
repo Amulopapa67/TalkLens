@@ -64,6 +64,26 @@ func runProbe(arguments: [String]) -> Int32 {
         }
     }
     print("messages: total=\(messages.count) mine=\(mine) others=\(others) system=\(system) locate=\(formatMs(locateMs))ms parse=\(formatMs(parseMs))ms")
+
+    // Incremental reads (the app's path): the same window read twice through one row cache, each time from a
+    // fresh node so the second read pays its real IPC. Numbers only.
+    let cache = TranscriptRowCache<LiveAXNode>()
+    var incremental: [ChatWindowRead] = []
+    var incrementalMs: [Double] = []
+    for _ in 0..<2 {
+        let w = Stopwatch()
+        guard let r = try? KakaoChatReader.read(window: LiveAXNode(window.element), cache: cache, parser: parser) else { break }
+        incrementalMs.append(w.elapsedMilliseconds)
+        incremental.append(r)
+    }
+    if incremental.count == 2 {
+        let a = incremental[0], b = incremental[1]
+        print("incremental: rowsTotal=\(b.rowsTotal) loaded=\(b.snapshot.messages.count) visible=\(b.visibleIDs.count) "
+              + "first=\(formatMs(incrementalMs[0]))ms analyzed=\(a.rowsAnalyzed) "
+              + "second=\(formatMs(incrementalMs[1]))ms analyzed=\(b.rowsAnalyzed) verified=\(b.rowsVerified)")
+    } else {
+        print("incremental: FAIL read error")
+    }
     print("probe: OK kakao=\(version) windows=\(windows.count) chat=\(chatWindows) rows=\(rowsTotal) messages=\(messages.count) parse=\(formatMs(parseMs))ms")
     return ExitCode.ok
 }

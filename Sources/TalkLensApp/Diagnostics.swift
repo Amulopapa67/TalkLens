@@ -16,6 +16,10 @@ final class Diagnostics {
     private(set) var readSamples: [Double] = []
     /// TranscriptDiffer.diff + preprocessing of new rows.
     private(set) var ingestSamples: [Double] = []
+    /// Rows whose subtree one incremental read analysed (0 = everything came from the row cache).
+    private(set) var rowsAnalyzedSamples: [Double] = []
+    /// Loaded rows of the transcript table at the last read.
+    private(set) var lastRowsTotal = 0
 
     private(set) var readCount = 0
     private(set) var readFailureCount = 0
@@ -39,6 +43,13 @@ final class Diagnostics {
         if let ms { append(&readSamples, ms) } else { readFailureCount += 1 }
     }
 
+    /// Successful read: duration plus how much of it was incremental.
+    func recordRead(_ ms: Double, rowsAnalyzed: Int, rowsTotal: Int) {
+        recordRead(ms)
+        append(&rowsAnalyzedSamples, Double(rowsAnalyzed))
+        lastRowsTotal = rowsTotal
+    }
+
     func recordAXEvent() { axEventCount += 1 }
     func recordPollRead() { pollReadCount += 1 }
     func recordCheapPollCheck() { cheapPollCheckCount += 1 }
@@ -50,12 +61,14 @@ final class Diagnostics {
     var translationStats: LatencyStats { LatencyStats(translationSamples) }
     var readStats: LatencyStats { LatencyStats(readSamples) }
     var ingestStats: LatencyStats { LatencyStats(ingestSamples) }
+    var rowsAnalyzedStats: LatencyStats { LatencyStats(rowsAnalyzedSamples) }
 
     /// One numbers-only line for `log show` (durations in ms and counts; no content).
     var summaryLine: String {
         func f(_ s: LatencyStats) -> String { String(format: "n=%d p50=%.1f p95=%.1f", s.count, s.p50, s.p95) }
         return "stats translation[\(f(translationStats))] follow[\(f(followStats))] read[\(f(readStats))] "
-            + "ingest[\(f(ingestStats))] reads=\(readCount) readFailures=\(readFailureCount) "
+            + "ingest[\(f(ingestStats))] rowsAnalyzed[\(f(rowsAnalyzedStats))] rowsTotal=\(lastRowsTotal) "
+            + "reads=\(readCount) readFailures=\(readFailureCount) "
             + "axEvents=\(axEventCount) pollReads=\(pollReadCount) cheapPollChecks=\(cheapPollCheckCount) "
             + "skippedHiddenReads=\(skippedHiddenReadCount) overlayFastTrackTicks=\(overlayFastTrackTicks) "
             + "overlayReanchors=\(overlayReanchors)"

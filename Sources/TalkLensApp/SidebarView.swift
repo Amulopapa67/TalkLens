@@ -35,7 +35,7 @@ struct SidebarView: View {
                 banner
                 Divider()
             }
-            if model.rows.isEmpty {
+            if model.visibleRows.isEmpty {
                 EmptyStateView(model: model, actions: actions)
             } else {
                 MessageListView(model: model, settings: settings)
@@ -194,10 +194,12 @@ private struct MessageListView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(model.rows.enumerated()), id: \.element.id) { index, row in
+                    // Only what is on screen in KakaoTalk (the model also holds pre-translated off-screen rows).
+                    let shown = model.visibleRows
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, row in
                         MessageRowView(row: row, fontSize: settings.fontSize,
                                        originalVisible: model.isOriginalVisible(row.id),
-                                       showsMeta: Self.showsMeta(rows: model.rows, at: index),
+                                       showsMeta: Self.showsMeta(rows: shown, at: index),
                                        onToggleOriginal: { model.toggleOriginal(row.id) })
                             .id(row.id)
                             .transition(.opacity)

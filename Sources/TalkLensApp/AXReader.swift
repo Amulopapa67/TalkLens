@@ -4,7 +4,8 @@
 //
 // Only `AXElementRef` values cross isolation domains. `LiveAXNode` graphs (which cache attributes and
 // children) are created and dropped inside the actor that reads them, so a cached frame can never be reused
-// by another actor or outlive the read that produced it.
+// by another actor or outlive the read that produced it. The per-window `TranscriptRowCache`s (row analyses,
+// in memory only) are owned and used exclusively by `AXReader`; they never leave the actor.
 
 import ApplicationServices
 import CoreGraphics
@@ -143,11 +144,15 @@ actor AXReader {
     }
 
     private let parser: TranscriptParser
-    /// Inline overlay mode: also parse rows about one viewport height above and below the viewport.
+    /// Kept for API compatibility: every read now covers all loaded rows (incremental), so the inline
+    /// overlay's margin no longer changes what is read.
     private var inlineMargin = false
-    private var lastViewportHeight: CGFloat?
-    /// Margin used before the first read has measured the viewport.
-    static let defaultInlineMargin: CGFloat = 500
+    /// Row caches of recently followed chat windows, most recently used last.
+    private var rowCaches: [(window: AXElementKey, cache: TranscriptRowCache<LiveAXNode>)] = []
+    static let maxRowCaches = 4
+    /// Memoised chat-window test per window element (`isChatWindow` scans the window's tree). Only stable
+    /// answers are kept: "chat window" and "main window"; other negatives are re-evaluated.
+    private var windowKinds: [AXElementKey: Bool] = [:]
     private var lastStartedAt: ContinuousClock.Instant?
     private var lastOutcome: ReadOutcome?
     private var probeTarget: ProbeTarget?
@@ -176,7 +181,7 @@ actor AXReader {
     func resolveWindow() -> ReadOutcome {
         guard KakaoProcess.isAccessibilityTrusted else { return .failure(.notTrusted, window: nil) }
         guard let app = KakaoProcess.applicationNode() else { return .failure(.notRunning, window: nil) }
-        guard let window = KakaoChatReader.currentChatWindow(app: app) else {
+        guard let window = currentChatWindow(app: app) else {
             return .failure(.noChatWindow, window: nil)
         }
         let ref = AXElementRef(element: window.element)
@@ -196,39 +201,72 @@ actor AXReader {
     func chatWindowChanged(from current: AXElementRef?) -> Bool {
         guard KakaoProcess.isAccessibilityTrusted, let app = KakaoProcess.applicationNode() else { return true }
         if let current, let focused = app.focusedWindow, CFEqual(focused.element, current.element) { return false }
-        guard let window = KakaoChatReader.currentChatWindow(app: app) else { return current != nil }
+        guard let window = currentChatWindow(app: app) else { return current != nil }
         guard let current else { return true }
         return !CFEqual(window.element, current.element)
     }
 
+    /// No effect on what is read any more (all loaded rows are read incrementally); kept for callers.
     func setInlineMargin(_ enabled: Bool) {
         inlineMargin = enabled
     }
 
-    /// Drops the cached outcome (it holds chat content in memory) and the probe state.
+    /// Drops the cached outcome and the row caches (they hold chat content in memory) and the probe state.
     func clear() {
         lastOutcome = nil
         lastStartedAt = nil
         probeTarget = nil
         lastSignature = nil
+        rowCaches.removeAll()
+        windowKinds.removeAll()
+    }
+
+    /// Current chat window, with the chat-window test memoised per element.
+    private func currentChatWindow(app: LiveAXNode) -> LiveAXNode? {
+        KakaoChatReader.currentChatWindow(app: app) { window in
+            let key = window.elementIdentity
+            if let known = windowKinds[key] { return known }
+            if KakaoChatReader.isMainWindow(window) {
+                windowKinds[key] = false
+                return false
+            }
+            let isChat = KakaoChatReader.isChatWindow(window)
+            if isChat {
+                if windowKinds.count > 64 { windowKinds.removeAll() }
+                windowKinds[key] = true
+            }
+            return isChat
+        }
+    }
+
+    /// Row cache for `window` (created on first use; least recently used caches are dropped).
+    private func rowCache(for window: AXElementKey) -> TranscriptRowCache<LiveAXNode> {
+        if let i = rowCaches.firstIndex(where: { $0.window == window }) {
+            let entry = rowCaches.remove(at: i)
+            rowCaches.append(entry)
+            return entry.cache
+        }
+        let cache = TranscriptRowCache<LiveAXNode>()
+        rowCaches.append((window, cache))
+        if rowCaches.count > Self.maxRowCaches { rowCaches.removeFirst(rowCaches.count - Self.maxRowCaches) }
+        return cache
     }
 
     private func performRead() -> ReadOutcome {
         guard KakaoProcess.isAccessibilityTrusted else { return fail(.notTrusted, window: nil) }
         guard let app = KakaoProcess.applicationNode() else { return fail(.notRunning, window: nil) }
-        guard let window = KakaoChatReader.currentChatWindow(app: app) else { return fail(.noChatWindow, window: nil) }
+        guard let window = currentChatWindow(app: app) else { return fail(.noChatWindow, window: nil) }
         let windowRef = AXElementRef(element: window.element)
         // Fingerprint taken *before* parsing: if the transcript changes during the parse, the next probe sees
         // a difference and triggers another read instead of silently missing it.
         let previousTarget = probeTarget.flatMap { $0.window.isSame(as: windowRef) ? $0 : nil }
         let preSignature = previousTarget.flatMap(Self.signature)
-        var parser = self.parser
-        if inlineMargin { parser.visibleMargin = lastViewportHeight ?? Self.defaultInlineMargin }
+        let cache = rowCache(for: window.elementIdentity)
         do {
-            let result = try KakaoChatReader.read(window: window, parser: parser)
-            if let height = result.transcriptFrame?.height, height > 0 { lastViewportHeight = height }
-            // Same (already cached) node graph: locating the table again costs no extra IPC.
-            let tableNode = TranscriptLocator.locate(inWindow: window)
+            // Incremental: only rows not analysed before (or lazily loaded / resized) cost a subtree walk.
+            let result = try KakaoChatReader.read(window: window, cache: cache, parser: parser)
+            // The table node of this read (its frame and children are already fetched).
+            let tableNode = cache.lastTable ?? TranscriptLocator.locate(inWindow: window)
                 .flatMap { KakaoChatReader.firstTable(under: $0.transcriptRoot) }
             let table = tableNode.map { AXElementRef(element: $0.element) }
             updateProbeTarget(window: windowRef, table: table, previous: previousTarget, preSignature: preSignature)

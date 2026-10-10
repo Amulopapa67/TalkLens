@@ -1,4 +1,4 @@
-// Derived from kmsg (https://github.com/channprj/kmsg) @54cbff7 — MIT License, Copyright (c) 2026 Park Hee Chan. Modifications: row analysis of TranscriptReader.swift rewritten generic over AXNodeLike and deterministic (no Date(), explicit reference year); rows collected by one budgeted BFS and filtered to the visible transcript area, with up to 20 off-screen context rows per side analysed but not emitted; avatars may be AXImage or AXButton; author taken from the static text above the body; time/date resolved forward within a same-sender group before kmsg's per-side carry-over; system rows (centered notices, date dividers) kept with isSystem; image/file-only rows kept; truncated URLs replaced in place by the AXLink title; bubble background frame reported per message and an optional vertical margin around the visible area; removed AXActionRunner logging, the text-area fallback scan and the message limit/dedup logic.
+// Derived from kmsg (https://github.com/channprj/kmsg) @54cbff7 — MIT License, Copyright (c) 2026 Park Hee Chan. Modifications: row analysis of TranscriptReader.swift rewritten generic over AXNodeLike and deterministic (no Date(), explicit reference year); rows collected by one budgeted BFS and filtered to the visible transcript area, with up to 20 off-screen context rows per side analysed but not emitted; avatars may be AXImage or AXButton; author taken from the static text above the body; time/date resolved forward within a same-sender group before kmsg's per-side carry-over; system rows (centered notices, date dividers) kept with isSystem; image/file-only rows kept; truncated URLs replaced in place by the AXLink title; bubble background frame reported per message and an optional vertical margin around the visible area; removed AXActionRunner logging, the text-area fallback scan and the message limit/dedup logic; split into a cacheable per-row analysis (shiftable by a scroll offset) and an in-memory assembly step for incremental reads (TranscriptRowCache).
 // SPDX-License-Identifier: MIT
 
 import CoreGraphics
@@ -103,12 +103,9 @@ public struct TranscriptParser: Sendable {
             return a.order < b.order
         }
         let margin = visibleOnly ? visibleMargin : 0
-        let visibleFrame = visibleOnly ? transcriptFrame.map { $0.insetBy(dx: 0, dy: -margin) } : nil
+        let visibleFrame = visibleOnly ? transcriptFrame : nil
         func isEmitted(_ frame: CGRect?) -> Bool {
-            guard let f = frame else { return true }
-            if let inputFrame, f.maxY > inputFrame.minY + 20 + margin { return false }
-            if let tf = visibleFrame, f.intersection(tf).height < min(4, f.height) { return false }
-            return true
+            TranscriptParser.isOnScreen(frame, viewport: visibleFrame, inputFrame: inputFrame, margin: margin)
         }
         let emitted = rows.indices.filter { isEmitted(rows[$0].frame) }.suffix(maxRows)
         guard let first = emitted.first, let last = emitted.last else { return [] }
@@ -118,11 +115,24 @@ public struct TranscriptParser: Sendable {
         return (lo...hi).map { i in (rows[i].node, rows[i].frame, emittedSet.contains(i)) }
     }
 
+    /// Whether a row frame counts as on screen: it starts above the input box (plus `margin`) and overlaps the
+    /// viewport grown by `margin` above and below by at least 4 pt (or its whole height when smaller). A nil
+    /// viewport skips the overlap test; a nil frame counts as on screen.
+    public static func isOnScreen(_ frame: CGRect?, viewport: CGRect?, inputFrame: CGRect?, margin: CGFloat = 0) -> Bool {
+        guard let f = frame else { return true }
+        if let inputFrame, f.maxY > inputFrame.minY + 20 + margin { return false }
+        if let vf = viewport?.insetBy(dx: 0, dy: -margin), f.intersection(vf).height < min(4, f.height) { return false }
+        return true
+    }
+
     // MARK: - Row analysis
 
-    enum Side: String { case left, right, unknown }
+    enum Side: String, Sendable { case left, right, unknown }
 
-    struct RowAnalysis {
+    /// Everything the assembly step needs from one row. Computed once per row (the expensive, IPC-bound part)
+    /// and cacheable: vertical scrolling and window moves only translate its frames (`offsetBy`); a change of
+    /// the transcript width (re-wrap, side detection) requires a new analysis.
+    struct RowAnalysis: Sendable, Equatable {
         var rowFrame: CGRect?
         var body: String
         var bodyFrame: CGRect?
@@ -138,6 +148,17 @@ public struct TranscriptParser: Sendable {
         var side: Side = .unknown
         var isSystem = false
         var dividerDate: String?
+
+        /// The same analysis with every frame translated (scroll offset / window move since the analysis).
+        func offsetBy(dx: CGFloat, dy: CGFloat) -> RowAnalysis {
+            guard dx != 0 || dy != 0 else { return self }
+            var a = self
+            a.rowFrame = rowFrame?.offsetBy(dx: dx, dy: dy)
+            a.bodyFrame = bodyFrame?.offsetBy(dx: dx, dy: dy)
+            a.contentFrame = contentFrame?.offsetBy(dx: dx, dy: dy)
+            a.bubbleFrame = bubbleFrame?.offsetBy(dx: dx, dy: dy)
+            return a
+        }
     }
 
     private struct TextItem {

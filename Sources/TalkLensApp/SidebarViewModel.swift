@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Snapshot → diff → preprocess → rows → translation. All chat content lives only in memory here; nothing is
 // written to disk and nothing but counts/durations is logged.
+//
+// `rows` covers every loaded message of the chat (not only the ones on screen), so the inline overlay can draw
+// whatever scrolls into view at once, and everything loaded is pre-translated: visible messages first (newest
+// first), then the rest by distance from the viewport. `visibleIDs` marks the rows on screen; the sidebar list
+// shows only those (`visibleRows`).
 
 import Foundation
 import Observation
@@ -53,18 +58,25 @@ final class SidebarViewModel {
         var failed = 0
     }
 
+    /// Every loaded message of the current chat, top to bottom (on screen or not).
     private(set) var rows: [SidebarRow] = []
+    /// Ids of the rows currently on screen in KakaoTalk (a subset of the ids in `rows`).
+    private(set) var visibleIDs: Set<MessageID> = []
     private(set) var status: Status = .starting
     private(set) var engineStatus: EngineStatus?
     /// Shown in the sidebar header only (local UI); never logged.
     private(set) var chatTitle: String?
-    /// Incremented when rows are appended at the bottom of the same chat (drives auto-scroll / pill).
+    /// Incremented when rows the sidebar shows are appended at the bottom of the same chat (drives
+    /// auto-scroll / pill).
     private(set) var appendedTick = 0
     private(set) var lastAppendedCount = 0
     /// Incremented when the row list is replaced (chat switch / first load / reprocess).
     private(set) var resetTick = 0
     /// Rows whose original-text visibility is flipped relative to the global setting.
     var toggledOriginals: Set<MessageID> = []
+
+    /// Upper bound on messages submitted for translation per chat (visible ones always come first).
+    static let translationCap = TranslationPriority.defaultCap
 
     @ObservationIgnored let service: TranslationService
     @ObservationIgnored private let settings: AppSettings
@@ -81,6 +93,8 @@ final class SidebarViewModel {
     @ObservationIgnored private var rowIndex: [MessageID: Int] = [:]
     @ObservationIgnored private var seenAt: [MessageID: ContinuousClock.Instant] = [:]
     @ObservationIgnored private var translateTask: Task<Void, Never>?
+    /// Ids of the current submission without an outcome yet, in submission (priority) order.
+    @ObservationIgnored private var outstanding: [MessageID] = []
 
     init(service: TranslationService, glossary: Glossary, settings: AppSettings, diagnostics: Diagnostics) {
         self.service = service
@@ -91,6 +105,7 @@ final class SidebarViewModel {
                                              glossaryEnabled: settings.glossaryEnabled)
     }
 
+    /// Counts over every loaded row (not only the visible ones).
     var counts: Counts {
         var c = Counts(rows: rows.count)
         for row in rows {
@@ -109,6 +124,15 @@ final class SidebarViewModel {
         let all = rows
         guard let idx = rowIndex[id], idx < all.count, all[idx].id == id else { return nil }
         return all[idx]
+    }
+
+    /// Whether the message is on screen in KakaoTalk.
+    func isVisible(_ id: MessageID) -> Bool { visibleIDs.contains(id) }
+
+    /// Rows on screen in KakaoTalk, top to bottom (what the sidebar list shows).
+    var visibleRows: [SidebarRow] {
+        let visible = visibleIDs
+        return rows.filter { visible.contains($0.id) }
     }
 
     func isOriginalVisible(_ id: MessageID) -> Bool {
@@ -136,7 +160,7 @@ final class SidebarViewModel {
         if value {
             cancelTranslations()
         } else {
-            scheduleTranslation(order: visibleNewestFirst())
+            scheduleTranslation(force: true)
         }
     }
 
@@ -154,13 +178,15 @@ final class SidebarViewModel {
     ///   "new message seen → translation displayed" latency is measured from there.
     func ingest(_ read: ChatWindowReadLike, triggeredAt: ContinuousClock.Instant? = nil) {
         ingest(snapshot: read.snapshot, title: read.title, animate: true, triggeredAt: triggeredAt,
-               viewport: read.transcriptFrame)
+               viewport: read.transcriptFrame, visibleIDs: read.visibleIDs)
     }
 
-    /// - viewport: transcript viewport (AX). When given, rows on screen are translated before rows parsed
-    ///   only as margin above/below it (inline mode).
+    /// - viewport: transcript viewport (AX); tells the visible rows apart when `visibleIDs` is nil.
+    /// - visibleIDs: messages on screen. nil = derive them from `viewport` and the frames, or (no viewport)
+    ///   treat every message as visible.
     func ingest(snapshot: TranscriptSnapshot, title: String?, animate: Bool,
-                triggeredAt: ContinuousClock.Instant? = nil, viewport: CGRect? = nil) {
+                triggeredAt: ContinuousClock.Instant? = nil, viewport: CGRect? = nil,
+                visibleIDs: Set<MessageID>? = nil) {
         guard !paused else { return }
         let seenInstant = triggeredAt ?? .now
         let stopwatch = Stopwatch()
@@ -168,24 +194,35 @@ final class SidebarViewModel {
         if chatTitle != title { chatTitle = title }
 
         let newIDs = snapshot.messages.map(\.id)
+        let newVisible = visibleIDs ?? Self.visible(snapshot.messages, viewport: viewport)
         let diff = TranscriptDiffer.diff(old: lastIDs, new: newIDs)
         let hadRows = !lastIDs.isEmpty
         // Order-only changes (same ids, different order) also rebuild the rows.
-        guard diff.hasChanges || newIDs != lastIDs || (rows.isEmpty && !newIDs.isEmpty) else { return }
+        guard diff.hasChanges || newIDs != lastIDs || (rows.isEmpty && !newIDs.isEmpty) else {
+            // Same messages, e.g. the user scrolled: only the visible set (and so the priority) changes.
+            if newVisible != self.visibleIDs {
+                self.visibleIDs = newVisible
+                scheduleTranslation()
+            }
+            return
+        }
         let isIncremental = hadRows && !diff.isReset
-        // "Appended" = only rows below the last row that was already on screen. A row replaced in the middle
+        // "Appended" = only rows below the last row that was already loaded. A row replaced in the middle
         // (edited / deleted message) is just an updated row: no pill, no auto-scroll, no latency sample.
         let appendedIDs = isIncremental ? Self.tailAfterLastCommon(old: lastIDs, new: newIDs) : []
+        // The sidebar only shows visible rows: its pill / auto-scroll only count those.
+        let visibleAppended = appendedIDs.filter { newVisible.contains($0) }
 
         lastIDs = newIDs
         messages = snapshot.messages
-        let visible = Set(newIDs)
+        let present = Set(newIDs)
         for message in messages where prepared[message.id] == nil {
             prepared[message.id] = preprocessor.process(message)
         }
-        prepared = prepared.filter { visible.contains($0.key) }
-        seenAt = seenAt.filter { visible.contains($0.key) }
-        toggledOriginals = toggledOriginals.filter { visible.contains($0) }
+        prepared = prepared.filter { present.contains($0.key) }
+        seenAt = seenAt.filter { present.contains($0.key) }
+        toggledOriginals = toggledOriginals.filter { present.contains($0) }
+        outstanding = outstanding.filter { present.contains($0) }
 
         var previous: [MessageID: RowTranslation] = [:]
         for row in rows { previous[row.id] = row.translation }
@@ -196,33 +233,27 @@ final class SidebarViewModel {
                 seenAt[id] = seenInstant
             }
         }
-        if isIncremental && animate && !appendedIDs.isEmpty {
-            withAnimation(.easeOut(duration: 0.25)) { setRows(newRows) }
+        if isIncremental && animate && !visibleAppended.isEmpty {
+            withAnimation(.easeOut(duration: 0.25)) {
+                setRows(newRows)
+                self.visibleIDs = newVisible
+            }
         } else {
             setRows(newRows)
+            self.visibleIDs = newVisible
         }
         if isIncremental {
-            if !appendedIDs.isEmpty {
-                lastAppendedCount = appendedIDs.count
+            if !visibleAppended.isEmpty {
+                lastAppendedCount = visibleAppended.count
                 appendedTick &+= 1
             }
         } else {
             resetTick &+= 1
         }
         diagnostics.recordIngest(stopwatch.elapsedMilliseconds)
-        logger.debug("ingest rows=\(newRows.count) appended=\(appendedIDs.count) prepended=\(diff.prepended.count) reset=\(diff.isReset)")
+        logger.debug("ingest rows=\(newRows.count) visible=\(newVisible.count) appended=\(appendedIDs.count) prepended=\(diff.prepended.count) reset=\(diff.isReset)")
 
-        // Priority: appended > visible bottom > visible top > prepended (each newest-first). Rows replaced in
-        // the middle are still pending and get translated as part of the visible set.
-        let appended = Array(appendedIDs.reversed())
-        let prepended = Array(diff.prepended.reversed())
-        let edges = Set(appended).union(prepended)
-        var middle = newIDs.reversed().filter { !edges.contains($0) }
-        if let viewport {
-            let onScreen = Set(messages.filter { m in m.frame.map { $0.cgRect.intersects(viewport) } ?? true }.map(\.id))
-            middle = middle.filter { onScreen.contains($0) } + middle.filter { !onScreen.contains($0) }
-        }
-        scheduleTranslation(order: appended + middle + prepended)
+        scheduleTranslation()
     }
 
     /// Ids of `new` below the last id that also exists in `old` (empty when there is no overlap).
@@ -232,12 +263,20 @@ final class SidebarViewModel {
         return Array(new[(last + 1)...])
     }
 
+    /// Messages whose frame intersects `viewport` (a message without a frame counts as visible); every
+    /// message when there is no viewport.
+    static func visible(_ messages: [ChatMessage], viewport: CGRect?) -> Set<MessageID> {
+        guard let viewport else { return Set(messages.map(\.id)) }
+        return Set(messages.filter { m in m.frame.map { $0.cgRect.intersects(viewport) } ?? true }.map(\.id))
+    }
+
     // MARK: - Settings changes
 
-    /// Target language changed: retarget the service, re-preprocess and re-translate the visible set.
+    /// Target language changed: retarget the service, re-preprocess and re-translate the loaded set.
     func retarget(_ languageID: String) {
         let previous = translateTask
         previous?.cancel()
+        outstanding = []
         let service = self.service
         translateTask = Task { [weak self] in
             await previous?.value
@@ -263,7 +302,7 @@ final class SidebarViewModel {
         for message in messages { prepared[message.id] = preprocessor.process(message) }
         setRows(messages.compactMap { m in prepared[m.id].map { makeRow($0, translation: nil) } })
         resetTick &+= 1
-        scheduleTranslation(order: visibleNewestFirst())
+        scheduleTranslation(force: true)
     }
 
     // MARK: - Rows
@@ -288,10 +327,6 @@ final class SidebarViewModel {
         rowIndex = index
     }
 
-    private func visibleNewestFirst() -> [MessageID] {
-        Array(messages.map(\.id).reversed())
-    }
-
     private func resetChat(_ newKey: String?) {
         cancelTranslations()
         chatKey = newKey
@@ -300,6 +335,7 @@ final class SidebarViewModel {
         prepared = [:]
         seenAt = [:]
         toggledOriginals = []
+        visibleIDs = []
         setRows([])
         if newKey == nil { chatTitle = nil }
         resetTick &+= 1
@@ -308,6 +344,7 @@ final class SidebarViewModel {
     // MARK: - Translation
 
     private func cancelTranslations() {
+        outstanding = []
         let previous = translateTask
         previous?.cancel()
         let service = self.service
@@ -317,14 +354,21 @@ final class SidebarViewModel {
         }
     }
 
-    private func scheduleTranslation(order: [MessageID]) {
+    /// Submits every loaded message that still needs a translation, in priority order (visible newest-first,
+    /// then the rest by distance from the viewport, nearest first), at most `translationCap` per chat.
+    /// Messages already translated (or failed) are never submitted again. When the outstanding submission
+    /// already covers exactly the same messages in the same order nothing is re-submitted, so work in flight
+    /// is not restarted; on a re-prioritisation the service keeps texts already in flight running (their
+    /// results reach the new submission through its cache / in-flight set).
+    private func scheduleTranslation(force: Bool = false) {
         guard !paused else { return }
-        var seen = Set<MessageID>()
-        var batch: [PreprocessedMessage] = []
-        for id in order where seen.insert(id).inserted {
-            guard let idx = rowIndex[id], rows[idx].translation == .pending, let p = prepared[id] else { continue }
-            batch.append(p)
+        let order = TranslationPriority.order(messages.map(\.id), visible: visibleIDs, cap: Self.translationCap) { id in
+            guard let idx = self.rowIndex[id], idx < self.rows.count else { return false }
+            return self.rows[idx].translation == .pending && self.prepared[id] != nil
         }
+        if !force, order == outstanding, translateTask != nil { return }
+        let batch = order.compactMap { prepared[$0] }
+        outstanding = order
         let previous = translateTask
         previous?.cancel()
         let service = self.service
@@ -353,21 +397,32 @@ final class SidebarViewModel {
                 guard !Task.isCancelled else { break }
                 self?.apply(outcome)
             }
+            // The stream ended without being superseded: anything still outstanding got no outcome and must
+            // be submittable again.
+            if !Task.isCancelled { self?.outstanding = [] }
         }
     }
 
     private func applyCached(_ hits: [(MessageID, String)]) {
         guard !hits.isEmpty else { return }
         var updated = rows
+        var finished = Set<MessageID>()
         for (id, value) in hits {
             guard let idx = rowIndex[id] else { continue }
             updated[idx].translation = .done(value)
+            finished.insert(id)
             recordLatency(id)
         }
         rows = updated
+        outstanding.removeAll { finished.contains($0) }
     }
 
     private func apply(_ outcome: TranslationOutcome) {
+        if outcome.error == .cancelled {
+            outstanding = [] // the submission was cut short; allow a re-submit
+        } else if let i = outstanding.firstIndex(of: outcome.id) {
+            outstanding.remove(at: i)
+        }
         guard let idx = rowIndex[outcome.id], idx < rows.count, rows[idx].id == outcome.id else { return }
         if let value = outcome.text {
             rows[idx].translation = .done(value)
@@ -381,6 +436,7 @@ final class SidebarViewModel {
         }
     }
 
+    /// Latency samples exist only for appended messages (see `ingest`): prefetched history is not "new".
     private func recordLatency(_ id: MessageID) {
         if let seen = seenAt.removeValue(forKey: id) {
             let d = ContinuousClock.now - seen
@@ -415,7 +471,10 @@ final class SidebarViewModel {
 /// The parts of KakaoAX.ChatWindowRead the view model needs (keeps the model testable without KakaoAX).
 protocol ChatWindowReadLike {
     var title: String { get }
+    /// Every loaded message, top to bottom.
     var snapshot: TranscriptSnapshot { get }
     /// Transcript viewport (AX coordinates), when known.
     var transcriptFrame: CGRect? { get }
+    /// Messages of `snapshot` on screen.
+    var visibleIDs: Set<MessageID> { get }
 }
