@@ -6,6 +6,11 @@
 // right-click and scrolling go straight to KakaoTalk). Scroll, mouse-move and modifier-flag events are only
 // *observed* through NSEvent monitors; no event is ever posted. While following a scroll, the only AX
 // traffic is one position/size read of the scroll anchor element per display frame.
+//
+// Occlusion: the overlay sits at `.floating`, so it would paint over any window that covers the chat window.
+// AppController feeds the covered rects (window-server metadata, see WindowOcclusion) into `setOccluders`;
+// they are cut out of a CAShapeLayer mask on the viewport container (scrolling never touches the mask), and
+// hover / hover cards ignore covered areas.
 
 import AppKit
 import KakaoAX
@@ -277,7 +282,18 @@ final class InlineOverlayController {
     /// Content is laid out this far below the hosting view's top so rows above the viewport can be drawn.
     private var margin: CGFloat = 0
     private var scrollDelta: CGFloat = 0
+    /// Scroll offset the current `placed` / labels were laid out for. Once the live offset drifts more than
+    /// half a margin from it, the layout is rebased so rows that scrolled into the band get labels.
+    private var baseDelta: CGFloat = 0
     private var viewportAX: CGRect?
+    /// Offset of the hosting view relative to the laid-out content.
+    private var shift: CGFloat { scrollDelta - baseDelta }
+
+    // Occlusion (see WindowOcclusion): covered rects in AX global and in viewport-local coordinates.
+    private var occludersAX: [CGRect] = []
+    private var occludersLocal: [CGRect] = []
+    private var maskedSize: CGSize = .zero
+    private let maskLayer = CAShapeLayer()
 
     private(set) var active = false
     private var optionHeld = false
@@ -326,6 +342,7 @@ final class InlineOverlayController {
         }
         margin = viewport.height
         scrollDelta = 0
+        baseDelta = 0
         movedSinceRead = false
         resizing = false
         if active { diagnostics.recordOverlayReanchor() }
@@ -351,8 +368,24 @@ final class InlineOverlayController {
         updateViewport()
     }
 
-    /// Visible only in inline mode while KakaoTalk is frontmost, a chat window is tracked (not minimized) and
-    /// translation is not paused.
+    /// Rects (AX global coordinates) of windows above the chat window. The overlay draws nothing there and
+    /// hover ignores them.
+    func setOccluders(_ rects: [CGRect]) {
+        guard rects != occludersAX else { return }
+        occludersAX = rects
+        updateMask()
+        guard active else { return }
+        updateHover()
+        // Same hovered message, but its card may now intersect (or no longer intersect) a covering window.
+        if let hovered = hoveredID {
+            let popover = makePopover(hovered)
+            if state.popover != popover { state.popover = popover }
+        }
+    }
+
+    /// Visible in inline mode while a tracked chat window is on screen (not minimized, not on another Space,
+    /// not entirely covered) and translation is not paused — also when KakaoTalk is not frontmost; windows
+    /// covering the chat window are masked out (`setOccluders`).
     func setActive(_ value: Bool) {
         guard value != active else { return }
         active = value
@@ -397,6 +430,7 @@ final class InlineOverlayController {
         scrollAnchor = nil
         anchorGeneration &+= 1
         scrollDelta = 0
+        baseDelta = 0
         state.labels = []
         state.notes = []
         setHover(nil)
@@ -423,13 +457,62 @@ final class InlineOverlayController {
             window.setFrame(frame, display: active, animate: false)
             container.frame = CGRect(origin: .zero, size: frame.size)
         }
+        updateMask()
         layoutHosting()
+    }
+
+    /// Masks the container with `viewport − union(occluders)`. Only rebuilt when the covered rects (viewport-
+    /// local) or the viewport size change; scrolling moves the hosting view inside the fixed mask.
+    private func updateMask() {
+        guard let viewport = viewportAX, let layer = container.layer else { return }
+        let bounds = CGRect(origin: .zero, size: viewport.size)
+        let local: [CGRect] = occludersAX.compactMap { r in
+            let l = CGRect(x: r.minX - viewport.minX, y: r.minY - viewport.minY, width: r.width, height: r.height)
+                .intersection(bounds)
+            return l.isNull || l.width <= 0 || l.height <= 0 ? nil : l
+        }
+        let maskInstalled = layer.mask != nil
+        guard local != occludersLocal || bounds.size != maskedSize || local.isEmpty == maskInstalled else { return }
+        occludersLocal = local
+        maskedSize = bounds.size
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        guard let first = local.first else {
+            layer.mask = nil
+            return
+        }
+        var covered = CGPath(rect: first, transform: nil)
+        for r in local.dropFirst() { covered = covered.union(CGPath(rect: r, transform: nil)) }
+        var visible = CGPath(rect: bounds, transform: nil).subtracting(covered)
+        // The container is flipped (top-left origin) and AppKit flips its backing layer to match; handle the
+        // unflipped case anyway.
+        if !layer.isGeometryFlipped {
+            var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: bounds.height)
+            visible = visible.copy(using: &flip) ?? visible
+        }
+        maskLayer.frame = bounds
+        maskLayer.fillColor = NSColor.black.cgColor
+        maskLayer.path = visible
+        if layer.mask !== maskLayer { layer.mask = maskLayer }
+    }
+
+    /// Viewport-local point (top-left origin) under a window that covers the chat window.
+    private func isOccluded(_ point: CGPoint) -> Bool {
+        occludersLocal.contains { $0.contains(point) }
+    }
+
+    /// Global Cocoa point (bottom-left origin) under a window that covers the chat window.
+    private func isOccluded(cocoa point: NSPoint) -> Bool {
+        guard !occludersAX.isEmpty, let primary = NSScreen.screens.first else { return false }
+        let ax = CGPoint(x: point.x, y: primary.frame.maxY - point.y)
+        return occludersAX.contains { $0.contains(ax) }
     }
 
     private func layoutHosting() {
         let width = container.bounds.width
         let height = max(container.bounds.height, viewportAtRead?.height ?? 0) + 2 * margin
-        let frame = CGRect(x: 0, y: -margin + scrollDelta, width: width, height: height)
+        let frame = CGRect(x: 0, y: -margin + shift, width: width, height: height)
         if hosting.frame.size != frame.size {
             hosting.frame = frame
         } else if hosting.frame.origin != frame.origin {
@@ -438,7 +521,7 @@ final class InlineOverlayController {
     }
 
     private func applyOffset() {
-        hosting.setFrameOrigin(NSPoint(x: 0, y: -margin + scrollDelta))
+        hosting.setFrameOrigin(NSPoint(x: 0, y: -margin + shift))
     }
 
     private func windowResizing() {
@@ -491,7 +574,9 @@ final class InlineOverlayController {
             if !state.notes.isEmpty { state.notes = [] }
             return
         }
-        placed = InlineLayout.place(rows: anchors, viewportAX: viewport, scrollDelta: 0, margin: margin)
+        // Rows may hold every loaded message; only those within the viewport ± one viewport (at the layout's
+        // scroll offset) are laid out. The container clips to the viewport.
+        placed = InlineLayout.place(rows: anchors, viewportAX: viewport, scrollDelta: baseDelta, margin: margin)
         let lineHeight = TextMeasurer.lineHeight(InlineStyle.fontSize)
         let pad = InlineStyle.padding
         let bounds = CGRect(x: 0, y: -margin, width: viewport.width, height: viewport.height + 2 * margin)
@@ -549,12 +634,12 @@ final class InlineOverlayController {
         }
         let f = window.frame
         let p = CGPoint(x: mouse.x - f.minX, y: f.maxY - mouse.y)
-        guard p.x >= 0, p.y >= 0, p.x <= f.width, p.y <= f.height else {
+        guard p.x >= 0, p.y >= 0, p.x <= f.width, p.y <= f.height, !isOccluded(p) else {
             setHover(nil)
             return
         }
         let candidates = placed.filter { translatedIDs.contains($0.id) }
-        setHover(InlineLayout.hit(p, in: candidates, scrollDelta: scrollDelta))
+        setHover(InlineLayout.hit(p, in: candidates, scrollDelta: shift))
     }
 
     private func setHover(_ id: MessageID?) {
@@ -578,11 +663,14 @@ final class InlineOverlayController {
         let width = max(textSize.width, chipsSize.width) + 2 * pad.width + 2
         let height = textSize.height + (chips == nil ? 0 : chipsSize.height + 4) + 2 * pad.height + 2
         // Visible part of the content (content coordinates) at the current scroll offset.
-        let bounds = CGRect(x: 4, y: margin - scrollDelta + 4, width: max(0, size.width - 8),
+        let bounds = CGRect(x: 4, y: margin - shift + 4, width: max(0, size.width - 8),
                             height: max(0, size.height - 8))
         let rect = InlineLayout.popoverFrame(bubble: p.bubble.offsetBy(dx: 0, dy: margin),
                                              size: CGSize(width: width, height: height), isMine: p.isMine,
                                              bounds: bounds)
+        // Never show the card over (or partly under) a window that covers the chat window.
+        let visibleRect = rect.offsetBy(dx: 0, dy: -margin + shift)
+        if occludersLocal.contains(where: { $0.intersects(visibleRect) }) { return nil }
         return InlinePopover(id: id, rect: rect, text: value, chips: chips)
     }
 
@@ -628,7 +716,9 @@ final class InlineOverlayController {
             lastMouse = NSEvent.mouseLocation
             guard let windowAX = tracker.geometry.windowAX, let primary = NSScreen.screens.first else { return }
             let chat = ScreenGeometry.axToCocoa(windowAX, primaryMaxY: primary.frame.maxY)
-            guard chat.contains(NSEvent.mouseLocation) else { return }
+            let mouse = NSEvent.mouseLocation
+            // Scrolling a window that covers the chat window does not scroll KakaoTalk.
+            guard chat.contains(mouse), !isOccluded(cocoa: mouse) else { return }
             lastChangeAt = .now
             startFastTracking()
         case .mouseMoved:
@@ -638,7 +728,8 @@ final class InlineOverlayController {
             // Dragging KakaoTalk's scroller (or a selection that auto-scrolls) inside the viewport. Drags
             // elsewhere (e.g. moving the window by its title bar) are handled by the window tracker.
             lastMouse = NSEvent.mouseLocation
-            guard window.frame.contains(NSEvent.mouseLocation) else { return }
+            let mouse = NSEvent.mouseLocation
+            guard window.frame.contains(mouse), !isOccluded(cocoa: mouse) else { return }
             lastChangeAt = .now
             startFastTracking()
         default:
@@ -691,6 +782,12 @@ final class InlineOverlayController {
         scrollDelta = delta
         lastChangeAt = .now
         movedSinceRead = true
+        if abs(shift) > margin / 2 {
+            // Re-place around the current offset so rows that scrolled into range get labels before the
+            // re-read at the end of the scroll.
+            baseDelta = scrollDelta
+            rebuild()
+        }
         applyOffset()
         updateHover()
     }
