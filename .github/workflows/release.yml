@@ -33,6 +33,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A maintainer may already have published this tag from a local build (styled DMG layout needs a
+          # Finder session); then leave it alone.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release $GITHUB_REF_NAME already exists — skipping upload"
+            exit 0
+          fi
           gh release create "$GITHUB_REF_NAME" \
             dist/TalkLens.dmg dist/TalkLens.dmg.sha256 dist/TalkLens.zip dist/TalkLens.zip.sha256 \
             --title "TalkLens $GITHUB_REF_NAME" --generate-notes
