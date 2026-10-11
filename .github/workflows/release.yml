@@ -1,0 +1,38 @@
+# Builds TalkLens on a macOS runner when a version tag (v*) is pushed and attaches TalkLens.dmg / TalkLens.zip
+# (+ .sha256) to a GitHub release. The build is ad-hoc signed (no Developer ID secrets are used); users
+# install with scripts/install.sh or by opening the DMG (see README "Gatekeeper").
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guards and tests
+        run: |
+          scripts/guard_readonly.sh
+          swift build -c release
+          swift test
+          .build/release/tlctl replay fixtures/snapshots --engine mock --golden fixtures/golden
+
+      - name: Package (ad-hoc signed)
+        env:
+          TALKLENS_SIGN_IDENTITY: "-"
+        run: scripts/package_release.sh
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/TalkLens.dmg dist/TalkLens.dmg.sha256 dist/TalkLens.zip dist/TalkLens.zip.sha256 \
+            --title "TalkLens $GITHUB_REF_NAME" --generate-notes

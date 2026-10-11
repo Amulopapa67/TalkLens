@@ -14,7 +14,9 @@ TalkLens 处理的是别人发给你的聊天消息，这些人并没有同意�
 | 设置 | UserDefaults 只保存偏好（目标语言、字号、透明度等），不含任何消息内容。 |
 | 用户词表 | `~/Library/Application Support/TalkLens/glossary.json`，只包含你自己写的词条。 |
 | 剪贴板 | 只有你点击"复制译文"时才写入。 |
-| 截屏 | 不截屏，不录屏。 |
+| 截屏 | 不截屏，不录屏。判断遮挡时只读窗口的位置、大小、层级等元信息（`CGWindowListCopyWindowInfo`），不读窗口图像，也不读其它 App 的窗口标题。 |
+| 输入事件 | 沉浸式覆盖层只**观察**滚轮、鼠标移动、拖动和修饰键（⌥），用来让译文跟随滚动、实现悬停显示原文；不记录、不保存，不观察按键内容，也从不模拟任何键鼠事件。 |
+| 安装脚本 | `scripts/install.sh` 会从 GitHub Releases 下载安装包。这是唯一联网的部分，App 本身不联网。 |
 | KakaoTalk 数据 | 不读取、不解密 KakaoTalk 的数据目录、数据库或缓存；不使用其网络协议。 |
 | 遥测 | 没有。 |
 
@@ -34,7 +36,9 @@ TalkLens handles messages other people sent to you, who never agreed to share th
 | Settings | UserDefaults stores preferences only (target language, font size, opacity…), no message content. |
 | User glossary | `~/Library/Application Support/TalkLens/glossary.json`, containing only entries you wrote. |
 | Clipboard | Written only when you click "copy translation". |
-| Screen capture | None. |
+| Screen capture | None. Occlusion handling reads window metadata only (position, size, layer via `CGWindowListCopyWindowInfo`) — never window images or other apps' window titles. |
+| Input events | The immersive overlay only *observes* scroll-wheel, mouse-move, drag and modifier-key (⌥) events to follow scrolling and reveal originals on hover. Nothing is recorded or stored, key presses are never observed, and no events are ever synthesized. |
+| Installer | `scripts/install.sh` downloads the release from GitHub Releases. It is the only part that uses the network; the app itself never does. |
 | KakaoTalk data | Never reads or decrypts KakaoTalk's data directories, databases or caches; never uses its network protocol. |
 | Telemetry | None. |
 

@@ -4,9 +4,15 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
-## [0.1.0] — 2026-10-10
+## [0.1.0] — 2026-10-11
 
 ### Added
+- Immersive overlay mode (default): translations painted over each message bubble in a click-through overlay; follows scrolling (scroll-wheel triggered fast tracking), window moves and new messages; hover a bubble or hold ⌥ to reveal the original.
+- Every open chat window is translated at once (one session per window), with occlusion masking so nothing is drawn over windows that cover a chat.
+- Read-only chats without an input box (business / channel accounts) are supported.
+- Selectable source language (auto-detect or fixed) and target language.
+- Incremental AX reads with a per-row cache, a prefetch band around the viewport and a per-read budget so KakaoTalk is never overloaded.
+- One-line installer (`scripts/install.sh`), DMG/zip packaging (`scripts/package_release.sh`) and a tag-triggered GitHub release workflow.
 - Menu bar app (`LSUIElement`) with enable/pause, show/hide sidebar, pin, settings, onboarding, about, quit.
 - Read-only KakaoTalk chat window reader (vendored read-only subset of kmsg, generic over `AXNodeLike`).
 - Non-activating sidebar panel docked to the chat window; follows move/resize/minimize/chat switch.
