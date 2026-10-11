@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-10-11
+
+### Added
+- App UI language setting: follow system / 简体中文 / 繁體中文 / English / 한국어 / 日本語, switches instantly.
+- Menu bar icon drawn from the logo, with paused, busy (dot) and attention (!) variants; colored logo in About and onboarding.
+- Menu bar submenus for source, target and UI language.
+
+### Changed
+- Source language defaults to Korean (smart auto-detect is still available as the first option).
+- Much faster start: the focused chat window is read first, Apple Translation is pre-warmed with a fixed word, and covered windows keep being read and translated in the background — translations are ready about 1 s after launch.
+- New-message path: 40 ms debounce on the transcript table's row-count event and no batching delay for new messages (measured ~80 ms from new message to translation).
+- Builds with older Xcode SDKs (macOS 26 translation APIs behind compiler checks); CI runs on macOS 26.
+
+### Fixed
+- The DMG keeps its custom volume icon after the Finder layout step.
+- Latency statistics no longer count prefetched or initially loaded messages as new messages.
+
 ## [0.1.0] — 2026-10-11
 
 ### Added
