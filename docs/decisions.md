@@ -148,3 +148,18 @@
   - 翻译层：缓存 key 带每条消息的原文语言；按原文语言分批。语言对未安装时，相关消息判失败，提示"需要下载 X→Y 翻译语言"，侧栏和菜单汇总这些语言对并提供下载入口。Apple 引擎每个语言对一个 session（最多 4 个）。全部在本机完成，不联网。
   - 限制：macOS 15–25 的 SwiftUI 宿主兜底只有一个 session，语言对一变就要重建。
   - 日期：2026-10-11
+- **D-024 App 界面语言可设置；原文语言默认韩语**
+  - 决定：
+    - 界面语言可选：跟随系统（默认）/ 简体中文 / 繁體中文 / English / 한국어 / 日本語，存在 UserDefaults `talklens.uiLanguage`，切换后立即生效。跟随系统时，按 `Locale.preferredLanguages` 取第一个能匹配的，否则用英文。
+    - 文案放在 TalkLensCore 的类型化字符串表 `UIStrings` 里，不用 `.lproj`：每个 key 五种语言都必须填，缺一种就编译不过；占位符按位置写 `{n}`，有单测核对。
+    - 原文语言新装默认 ko，取代 D-023 的"默认自动检测"；已存的值保持不变；"智能识别"仍可选，排在第一位。
+  - 影响：失败原因按界面语言显示，语言名也本地化。有 2 处旧测试的期望值按新默认值和新文案更新，属于需求变化，不是放水。
+  - 日期：2026-10-11
+- **D-025 构建兼容：macOS 26 SDK 接口加编译期判断；Command Line Tools 测试参数只在 CLT 是当前工具链时启用（修订 D-008）**
+  - 现象：GitHub `macos-15` runner 的 Xcode 较旧，SDK 里没有 `TranslationSession(installedSource:target:)`、`TranslationError.notInstalled` 和 `.lowLatency`，CI 编译失败。
+  - 决定：
+    - 这些接口外面加 `#if compiler(>=6.2)`（macOS 26 SDK），26.4 的接口加 `#if compiler(>=6.3)`。老 SDK 编出来的版本走 SwiftUI 宿主兜底路径。
+    - CI 改用 `macos-26` runner。
+    - Package.swift 只在当前开发者目录（`DEVELOPER_DIR` 或 `/var/db/xcode_select_link`）是 Command Line Tools 时，才加 swift-testing 的 plugin-path 和 rpath。装了 Xcode 的机器常常也有 CLT 目录，不能把两套工具链混在一起。
+  - 备注：本机在会话期间装了 Xcode，xcode-select 已指向 Xcode。去掉这些参数后，在 Xcode 工具链下 275 个测试全部通过。
+  - 日期：2026-10-11

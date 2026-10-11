@@ -6,10 +6,21 @@ import PackageDescription
 // With Command Line Tools only (no Xcode), the default build system does not find the swift-testing macro
 // plugin, so `@Test` fails to expand. Point the compiler at it when present (no effect under Xcode).
 let cltTestingPlugins = "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing"
-let testSwiftSettings: [SwiftSetting] = FileManager.default.fileExists(atPath: cltTestingPlugins)
+/// True only when the active developer directory (xcode-select) is the Command Line Tools: machines with Xcode
+/// (e.g. CI runners) often have a CLT directory too, but must not mix its plugins into Xcode's toolchain.
+let usingCommandLineTools: Bool = {
+    let fm = FileManager.default
+    guard fm.fileExists(atPath: cltTestingPlugins) else { return false }
+    if let dev = ProcessInfo.processInfo.environment["DEVELOPER_DIR"] { return dev.contains("CommandLineTools") }
+    if let link = try? fm.destinationOfSymbolicLink(atPath: "/var/db/xcode_select_link") {
+        return link.contains("CommandLineTools")
+    }
+    return !fm.fileExists(atPath: "/Applications/Xcode.app")
+}()
+let testSwiftSettings: [SwiftSetting] = usingCommandLineTools
     ? [.unsafeFlags(["-plugin-path", cltTestingPlugins])]
     : []
-let testLinkerSettings: [LinkerSetting] = FileManager.default.fileExists(atPath: cltTestingPlugins)
+let testLinkerSettings: [LinkerSetting] = usingCommandLineTools
     ? [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
                      "-Xlinker", "-rpath", "-Xlinker", "/Library/Developer/CommandLineTools/Library/Developer/usr/lib"])]
     : []

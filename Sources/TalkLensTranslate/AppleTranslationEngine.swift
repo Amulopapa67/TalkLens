@@ -85,12 +85,13 @@ public struct AppleTranslationEngine: TranslationEngine {
 
     static func languageState(source: Locale.Language, target: Locale.Language,
                               preferLowLatency: Bool) async -> AppleLanguageState {
-        let availability: LanguageAvailability
+        var availability = LanguageAvailability()
+        // macOS 26.4 SDK API (Swift 6.3+ toolchains); older SDKs build without it.
+        #if compiler(>=6.3)
         if #available(macOS 26.4, *), preferLowLatency {
             availability = LanguageAvailability(preferredStrategy: .lowLatency)
-        } else {
-            availability = LanguageAvailability()
         }
+        #endif
         switch await availability.status(from: source, to: target) {
         case .installed: return .installed
         case .supported: return .supported
@@ -114,7 +115,10 @@ public struct AppleTranslationEngine: TranslationEngine {
     }
 
     static func currentRoute() async -> AppleSessionRoute {
+        // UI-less sessions need the macOS 26 SDK (Swift 6.2+ toolchains) at build time.
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) { return .uiLess }
+        #endif
         let appRunning = await MainActor.run { NSApp != nil && NSApp.isRunning }
         return appRunning ? .hosted : .unavailable
     }
@@ -123,10 +127,12 @@ public struct AppleTranslationEngine: TranslationEngine {
     static func mapError(_ error: any Error) -> TranslationEngineError {
         if let e = error as? TranslationEngineError { return e }
         if error is CancellationError { return .cancelled }
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             if TranslationError.notInstalled ~= error { return .notInstalled }
             if TranslationError.alreadyCancelled ~= error { return .cancelled }
         }
+        #endif
         if TranslationError.unsupportedLanguagePairing ~= error
             || TranslationError.unsupportedSourceLanguage ~= error
             || TranslationError.unsupportedTargetLanguage ~= error {
@@ -178,6 +184,7 @@ actor AppleSessionStore {
 
     func translate(_ items: [TranslationItem], source: Locale.Language,
                    target: Locale.Language) async throws -> [TranslationResult] {
+        #if compiler(>=6.2)
         guard #available(macOS 26.0, *) else {
             throw TranslationEngineError.unsupported(AppleTranslationEngine.hostRequiredReason)
         }
@@ -213,13 +220,20 @@ actor AppleSessionStore {
             }
             throw mapped
         }
+        #else
+        throw TranslationEngineError.unsupported(AppleTranslationEngine.hostRequiredReason)
+        #endif
     }
 
+    #if compiler(>=6.2)
     @available(macOS 26.0, *)
     private func makeSession(source: Locale.Language, target: Locale.Language) -> TranslationSession {
+        #if compiler(>=6.3)
         if #available(macOS 26.4, *), preferLowLatency {
             return TranslationSession(installedSource: source, target: target, preferredStrategy: .lowLatency)
         }
+        #endif
         return TranslationSession(installedSource: source, target: target)
     }
+    #endif
 }
