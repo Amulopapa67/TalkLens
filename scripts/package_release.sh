@@ -48,19 +48,12 @@ cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 mkdir -p "$STAGE/.background"
 cp assets/dmg-background.tiff "$STAGE/.background/background.tiff"
-[ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$STAGE/.VolumeIcon.icns"
 
 RW="$(mktemp -u -t talklens-rw).dmg"
 hdiutil create -quiet -volname "$VOLNAME" -srcfolder "$STAGE" -fs HFS+ -format UDRW -ov "$RW"
 rm -rf "$STAGE"
 MOUNT_DIR="$(hdiutil attach -readwrite -noverify -noautoopen "$RW" | awk -F'\t' '/\/Volumes\//{print $NF; exit}')"
 [ -d "$MOUNT_DIR" ] || { echo "error: could not mount $RW" >&2; exit 1; }
-
-# Custom volume icon flag (SetFile ships with the Command Line Tools; skipped if missing).
-if command -v SetFile >/dev/null 2>&1 && [ -f "$MOUNT_DIR/.VolumeIcon.icns" ]; then
-  SetFile -c icnC "$MOUNT_DIR/.VolumeIcon.icns" 2>/dev/null || true
-  SetFile -a C "$MOUNT_DIR" 2>/dev/null || true
-fi
 
 if [ "${TALKLENS_DMG_LAYOUT:-1}" != "0" ]; then
   DISK_NAME="$(basename "$MOUNT_DIR")"
@@ -87,6 +80,15 @@ tell application "Finder"
   end tell
 end tell
 APPLESCRIPT
+  sync
+fi
+# Volume icon — after the Finder step, which removes .VolumeIcon.icns when it refreshes the window.
+if [ -f Resources/AppIcon.icns ]; then
+  cp Resources/AppIcon.icns "$MOUNT_DIR/.VolumeIcon.icns"
+  if command -v SetFile >/dev/null 2>&1; then   # SetFile ships with Xcode / Command Line Tools
+    SetFile -c icnC "$MOUNT_DIR/.VolumeIcon.icns" 2>/dev/null || true
+    SetFile -a C "$MOUNT_DIR" 2>/dev/null || true
+  fi
   sync
 fi
 hdiutil detach -quiet "$MOUNT_DIR" || hdiutil detach -quiet -force "$MOUNT_DIR"
