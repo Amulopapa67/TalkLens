@@ -43,6 +43,12 @@ ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT_DIR/TalkLens.zip"
 # AppleScript (packaging only — the app itself never uses AppleScript). Set TALKLENS_DMG_LAYOUT=0 to skip
 # the layout step (plain DMG, same contents).
 VOLNAME="TalkLens"
+# Finder addresses the disk by its volume name: another mounted "TalkLens" volume (e.g. an older DMG left open)
+# would get the layout instead, so refuse to continue until it is ejected.
+if ls -d /Volumes/"$VOLNAME"* >/dev/null 2>&1; then
+  echo "error: a volume named $VOLNAME is already mounted — eject it first (hdiutil detach /Volumes/$VOLNAME)" >&2
+  exit 1
+fi
 STAGE="$(mktemp -d -t talklens-dmg)"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
