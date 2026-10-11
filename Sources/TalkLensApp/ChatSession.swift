@@ -43,6 +43,8 @@ final class ChatSession: AXEventSink, InlineOverlayHost {
     static let tableNotifications = ["AXRowCountChanged"]
 
     static let contentDebounce: Duration = .milliseconds(120)
+    /// AXRowCountChanged on the followed transcript table (a new message): read sooner (D-027).
+    static let rowCountDebounce: Duration = .milliseconds(40)
     /// A continuous stream of content events still triggers a read at least this often.
     static let contentMaxWait: Duration = .milliseconds(400)
     /// Rows still pending after a budgeted read are read after this pause (D-020).
@@ -91,8 +93,13 @@ final class ChatSession: AXEventSink, InlineOverlayHost {
     var lastFullReadAt: ContinuousClock.Instant?
     /// First content event not yet covered by a started read.
     private var pendingTriggerAt: ContinuousClock.Instant?
+    /// Why the queued read was requested (content event / poll win over anything else).
+    private var pendingTrigger: ReadTrigger?
     private var debounceTask: Task<Void, Never>?
     private var debounceFirstEventAt: ContinuousClock.Instant?
+    private var debounceDeadline: ContinuousClock.Instant?
+    /// The pending debounce includes an AXRowCountChanged of the followed table (short debounce).
+    private var debounceFast = false
     /// True when at least one debounced event came from this window/table (→ full read); otherwise only a
     /// cheap probe.
     private var debounceNeedsRead = false
@@ -212,10 +219,12 @@ final class ChatSession: AXEventSink, InlineOverlayHost {
         }
     }
 
-    /// AXRowCountChanged from this window (or routed here from the app-level registration).
+    /// AXRowCountChanged from this window (or routed here from the app-level registration). On the followed
+    /// table it means a new message (or loaded history): read after the short debounce.
     func transcriptRowsChanged(element: AXElementRef) {
-        let ours = transcriptTable.map { $0.isSame(as: element) } ?? true
-        contentEvent(needsRead: ours)
+        let known = transcriptTable?.isSame(as: element)
+        let ours = known ?? true
+        contentEvent(needsRead: ours, fast: known == true)
         if ours { inline.transcriptRowsChanged() }
     }
 
@@ -229,7 +238,7 @@ final class ChatSession: AXEventSink, InlineOverlayHost {
             requestRead()
         } else {
             // Scrolling posts no notification; a cheap probe catches anything that changed while hidden.
-            probeAndMaybeRead()
+            probeAndMaybeRead(trigger: .other)
             geometryChanged(stopwatch: nil)
         }
     }
@@ -262,51 +271,72 @@ final class ChatSession: AXEventSink, InlineOverlayHost {
 
     /// Asks SessionManager for a full read of this window (serialized with every other session's reads).
     func requestRead() {
+        requestRead(trigger: .other)
+    }
+
+    func requestRead(trigger: ReadTrigger) {
         guard !ended else { return }
         guard contentWanted else {
             readDirty = true
+            // Whatever arrives while nothing is read is picked up by the read on return: not a latency sample.
+            pendingTriggerAt = nil
+            pendingTrigger = nil
             diagnostics.recordSkippedHiddenRead()
             return
         }
         readDirty = false
+        if pendingTrigger?.canSample != true { pendingTrigger = trigger }
         manager?.enqueueRead(self, followUp: false)
     }
 
-    /// Called by SessionManager when the read starts; returns the instant of the first content event behind it.
-    func readStarting(at requestedAt: ContinuousClock.Instant) -> ContinuousClock.Instant {
+    /// Called by SessionManager when the read starts; returns the instant of the first content event behind it
+    /// and why the read happens.
+    func readStarting(at requestedAt: ContinuousClock.Instant, followUp: Bool) -> (ContinuousClock.Instant, ReadTrigger) {
         let triggeredAt = pendingTriggerAt ?? requestedAt
+        let trigger = pendingTrigger ?? (followUp ? .followUp : .other)
         pendingTriggerAt = nil
-        return triggeredAt
+        pendingTrigger = nil
+        return (triggeredAt, trigger)
     }
 
-    private func contentEvent(needsRead: Bool) {
+    private func contentEvent(needsRead: Bool, fast: Bool = false) {
         lastContentEventAt = .now
         if needsRead, pendingTriggerAt == nil { pendingTriggerAt = lastContentEventAt }
         if needsRead { debounceNeedsRead = true }
-        scheduleDebouncedRead()
+        scheduleDebouncedRead(fast: fast && needsRead)
     }
 
-    private func scheduleDebouncedRead() {
+    /// Events are coalesced for `contentDebounce` (each event postpones the read, up to `contentMaxWait`); an
+    /// AXRowCountChanged of the followed table shortens the wait to `rowCountDebounce` and is never postponed.
+    private func scheduleDebouncedRead(fast: Bool) {
         let now = ContinuousClock.now
         if debounceTask != nil, let first = debounceFirstEventAt, now - first >= Self.contentMaxWait {
             return // Let the pending task fire; do not postpone it further.
         }
+        var deadline = now + (fast ? Self.rowCountDebounce : Self.contentDebounce)
+        if debounceTask != nil, let current = debounceDeadline, debounceFast || fast {
+            deadline = min(current, deadline)
+        }
         if debounceTask == nil { debounceFirstEventAt = now }
+        debounceFast = debounceFast || fast
+        debounceDeadline = deadline
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
-            try? await Task.sleep(for: ChatSession.contentDebounce)
+            try? await Task.sleep(until: deadline, tolerance: .milliseconds(5), clock: .continuous)
             guard !Task.isCancelled, let self, !self.ended else { return }
             self.debounceTask = nil
             self.debounceFirstEventAt = nil
+            self.debounceDeadline = nil
+            self.debounceFast = false
             let needsRead = self.debounceNeedsRead
             self.debounceNeedsRead = false
-            if needsRead { self.requestRead() } else { self.probeAndMaybeRead() }
+            if needsRead { self.requestRead(trigger: .contentEvent) } else { self.probeAndMaybeRead(trigger: .contentEvent) }
         }
     }
 
     /// Cheap probe (row count + last row frame + window size); a full read only when something changed or
     /// there is nothing to compare with.
-    func probeAndMaybeRead() {
+    func probeAndMaybeRead(trigger: ReadTrigger = .poll) {
         guard !ended, contentWanted, let manager, !manager.paused, !probeInFlight,
               !manager.isReading(self) else { return }
         probeInFlight = true
@@ -317,15 +347,19 @@ final class ChatSession: AXEventSink, InlineOverlayHost {
             probeInFlight = false
             guard !ended else { return }
             diagnostics.recordCheapPollCheck()
-            if result != .unchanged { requestRead() }
+            if result != .unchanged { requestRead(trigger: trigger) }
         }
     }
 
     /// Applies a read result (called by SessionManager on the main actor).
-    func handle(_ outcome: ReadOutcome, requestedAt: ContinuousClock.Instant, triggeredAt: ContinuousClock.Instant) {
+    func handle(_ outcome: ReadOutcome, requestedAt: ContinuousClock.Instant, triggeredAt: ContinuousClock.Instant,
+                trigger: ReadTrigger) {
         guard !ended else { return }
         switch outcome {
         case .read(let result, _, let table, let anchor):
+            diagnostics.markStartup(.firstRead)
+            let timing = ReadTiming(trigger: trigger, triggeredAt: triggeredAt, readStartedAt: requestedAt,
+                                    readEndedAt: .now, rowsTotal: result.rowsTotal)
             diagnostics.recordRead(result.elapsedMilliseconds, rowsAnalyzed: result.rowsAnalyzed,
                                    rowsTotal: result.rowsTotal)
             lastFullReadAt = .now
@@ -346,7 +380,7 @@ final class ChatSession: AXEventSink, InlineOverlayHost {
                 manager?.sessionGeometryChanged(self)
             }
             setState(.tracking)
-            model.ingest(result, triggeredAt: triggeredAt)
+            model.ingest(result, timing: timing)
             inline.ingest(result, anchor: anchor)
             if result.rowsPending > 0, contentWanted {
                 manager?.enqueueRead(self, followUp: true)

@@ -38,6 +38,18 @@ struct TranslationFailure: Equatable, Sendable {
     }
 }
 
+/// How a transcript read came about, for the "new message → translation displayed" samples (D-027).
+struct ReadTiming {
+    let trigger: ReadTrigger
+    /// First content event (or poll) behind the read.
+    let triggeredAt: ContinuousClock.Instant
+    let readStartedAt: ContinuousClock.Instant
+    /// The read result reached the main actor.
+    let readEndedAt: ContinuousClock.Instant
+    /// Loaded table rows at this read.
+    let rowsTotal: Int
+}
+
 struct SidebarRow: Identifiable, Equatable {
     let id: MessageID
     let author: String?
@@ -110,7 +122,18 @@ final class SidebarViewModel {
     @ObservationIgnored private var messages: [ChatMessage] = []
     @ObservationIgnored private var prepared: [MessageID: PreprocessedMessage] = [:]
     @ObservationIgnored private var rowIndex: [MessageID: Int] = [:]
-    @ObservationIgnored private var seenAt: [MessageID: ContinuousClock.Instant] = [:]
+    /// Latency traces of truly new messages (D-027), until their translation is displayed.
+    @ObservationIgnored private var traces: [MessageID: LatencyTrace] = [:]
+    /// Loaded table rows at the previous read (nil = unknown: the next read cannot carry samples).
+    @ObservationIgnored private var lastRowsTotal: Int?
+    /// Messages whose translation arrived and whose display is still to be confirmed (sidebar / headless).
+    @ObservationIgnored private var awaitingDisplay: Set<MessageID> = []
+    @ObservationIgnored private var displayConfirmTask: Task<Void, Never>?
+    /// No overlay draws this model's rows (self-check): a translation counts as displayed once applied.
+    @ObservationIgnored var headless = false
+    /// A translation that reaches the screen later than this after its outcome (e.g. the overlay was hidden
+    /// meanwhile) is not a latency sample.
+    static let displayGrace: Duration = .seconds(1)
     @ObservationIgnored private var translateTask: Task<Void, Never>?
     /// Ids of the current submission without an outcome yet, in submission (priority) order.
     @ObservationIgnored private var outstanding: [MessageID] = []
@@ -201,10 +224,10 @@ final class SidebarViewModel {
 
     // MARK: - Ingest
 
-    /// - triggeredAt: when the AX content event (or poll) that led to this read happened; the
-    ///   "new message seen → translation displayed" latency is measured from there.
-    func ingest(_ read: ChatWindowReadLike, triggeredAt: ContinuousClock.Instant? = nil) {
-        ingest(snapshot: read.snapshot, title: read.title, animate: true, triggeredAt: triggeredAt,
+    /// - timing: how the read came about; the "new message seen → translation displayed" latency of truly new
+    ///   messages is measured from its trigger (D-027).
+    func ingest(_ read: ChatWindowReadLike, timing: ReadTiming? = nil) {
+        ingest(snapshot: read.snapshot, title: read.title, animate: true, timing: timing,
                viewport: read.transcriptFrame, visibleIDs: read.visibleIDs)
     }
 
@@ -212,12 +235,13 @@ final class SidebarViewModel {
     /// - visibleIDs: messages on screen. nil = derive them from `viewport` and the frames, or (no viewport)
     ///   treat every message as visible.
     func ingest(snapshot: TranscriptSnapshot, title: String?, animate: Bool,
-                triggeredAt: ContinuousClock.Instant? = nil, viewport: CGRect? = nil,
+                timing: ReadTiming? = nil, viewport: CGRect? = nil,
                 visibleIDs: Set<MessageID>? = nil) {
         guard !paused else { return }
-        let seenInstant = triggeredAt ?? .now
         let stopwatch = Stopwatch()
         if snapshot.chatKey != chatKey { resetChat(snapshot.chatKey) }
+        let previousRowsTotal = lastRowsTotal
+        lastRowsTotal = timing?.rowsTotal
         if chatTitle != title { chatTitle = title }
 
         let newIDs = snapshot.messages.map(\.id)
@@ -240,6 +264,7 @@ final class SidebarViewModel {
         // The sidebar only shows visible rows: its pill / auto-scroll only count those.
         let visibleAppended = appendedIDs.filter { newVisible.contains($0) }
 
+        let previousIDs = hadRows ? lastIDs : []
         lastIDs = newIDs
         messages = snapshot.messages
         let present = Set(newIDs)
@@ -247,7 +272,8 @@ final class SidebarViewModel {
             prepared[message.id] = preprocessor.process(message)
         }
         prepared = prepared.filter { present.contains($0.key) }
-        seenAt = seenAt.filter { present.contains($0.key) }
+        let now = ContinuousClock.now
+        traces = traces.filter { present.contains($0.key) && now - $0.value.triggeredAt < .seconds(30) }
         toggledOriginals = toggledOriginals.filter { present.contains($0) }
         outstanding = outstanding.filter { present.contains($0) }
 
@@ -255,9 +281,15 @@ final class SidebarViewModel {
         for row in rows { previous[row.id] = row.translation }
         let newRows = messages.compactMap { m in prepared[m.id].map { makeRow($0, translation: previous[m.id]) } }
 
-        if isIncremental {
-            for id in appendedIDs where prepared[id]?.kind.needsTranslation == true && seenAt[id] == nil {
-                seenAt[id] = seenInstant
+        if let timing {
+            // Only truly new messages that arrived through a content event / poll are samples (D-027).
+            let eligible = LatencySampling.eligibleIDs(previous: previousIDs, previousRowsTotal: previousRowsTotal,
+                                                       current: newIDs, currentRowsTotal: timing.rowsTotal,
+                                                       trigger: timing.trigger)
+            for id in eligible where prepared[id]?.kind.needsTranslation == true && traces[id] == nil
+                && previous[id].map({ $0 == .pending }) ?? true {
+                traces[id] = LatencyTrace(triggeredAt: timing.triggeredAt, readStartedAt: timing.readStartedAt,
+                                          readEndedAt: timing.readEndedAt)
             }
         }
         if isIncremental && animate && !visibleAppended.isEmpty {
@@ -278,16 +310,15 @@ final class SidebarViewModel {
             resetTick &+= 1
         }
         diagnostics.recordIngest(stopwatch.elapsedMilliseconds)
-        logger.debug("ingest rows=\(newRows.count) visible=\(newVisible.count) appended=\(appendedIDs.count) prepended=\(diff.prepended.count) reset=\(diff.isReset)")
+        if !newRows.isEmpty { diagnostics.markStartup(.firstIngest) }
+        logger.debug("ingest rows=\(newRows.count) visible=\(newVisible.count) appended=\(appendedIDs.count) prepended=\(diff.prepended.count) reset=\(diff.isReset) trigger=\(timing?.trigger.rawValue ?? "none", privacy: .public) samples=\(self.traces.count)")
 
         scheduleTranslation()
     }
 
     /// Ids of `new` below the last id that also exists in `old` (empty when there is no overlap).
     static func tailAfterLastCommon(old: [MessageID], new: [MessageID]) -> [MessageID] {
-        let oldSet = Set(old)
-        guard let last = new.lastIndex(where: { oldSet.contains($0) }) else { return [] }
-        return Array(new[(last + 1)...])
+        LatencySampling.tailAfterLastCommon(old: old, new: new)
     }
 
     /// Messages whose frame intersects `viewport` (a message without a frame counts as visible); every
@@ -347,7 +378,7 @@ final class SidebarViewModel {
                                         glossaryEnabled: settings.glossaryEnabled)
         missingPairs = []
         prepared = [:]
-        seenAt = [:]
+        traces = [:]
         for message in messages { prepared[message.id] = preprocessor.process(message) }
         setRows(messages.compactMap { m in prepared[m.id].map { makeRow($0, translation: nil) } })
         resetTick &+= 1
@@ -382,7 +413,8 @@ final class SidebarViewModel {
         lastIDs = []
         messages = []
         prepared = [:]
-        seenAt = [:]
+        traces = [:]
+        lastRowsTotal = nil
         toggledOriginals = []
         missingPairs = []
         visibleIDs = []
@@ -420,10 +452,15 @@ final class SidebarViewModel {
         if !force, order == outstanding, translateTask != nil { return }
         let batch = order.compactMap { prepared[$0] }
         outstanding = order
+        // Nothing to coalesce with: a message that just arrived, or the first translations of this chat.
+        let immediate = order.contains { traces[$0] != nil }
+            || !rows.contains { if case .done = $0.translation { return true } else { return false } }
         let previous = translateTask
         previous?.cancel()
         let service = self.service
         let channel = self.channel
+        let activity = diagnostics.activity
+        let activityKey = "mt-" + channel
         translateTask = Task { [weak self] in
             // Serialize with the previous task so an older submit can never cancel a newer one.
             await previous?.value
@@ -432,6 +469,7 @@ final class SidebarViewModel {
                 await service.cancel(channel: channel)
                 return
             }
+            self?.noteSubmitted(batch.map(\.message.id))
             var hits: [(MessageID, String)] = []
             var misses: [PreprocessedMessage] = []
             for p in batch {
@@ -444,7 +482,9 @@ final class SidebarViewModel {
             guard !Task.isCancelled else { return }
             self?.applyCached(hits)
             guard !misses.isEmpty else { return }
-            let stream = await service.submit(misses, channel: channel)
+            activity.set(activityKey, busy: true)
+            defer { activity.set(activityKey, busy: false) }
+            let stream = await service.submit(misses, channel: channel, immediate: immediate)
             for await outcome in stream {
                 guard !Task.isCancelled else { break }
                 self?.apply(outcome)
@@ -463,10 +503,10 @@ final class SidebarViewModel {
             guard let idx = rowIndex[id] else { continue }
             updated[idx].translation = .done(value)
             finished.insert(id)
-            recordLatency(id)
         }
         rows = updated
         outstanding.removeAll { finished.contains($0) }
+        noteOutcomes(finished)
     }
 
     private func apply(_ outcome: TranslationOutcome) {
@@ -478,11 +518,12 @@ final class SidebarViewModel {
         guard let idx = rowIndex[outcome.id], idx < rows.count, rows[idx].id == outcome.id else { return }
         if let value = outcome.text {
             rows[idx].translation = .done(value)
-            recordLatency(outcome.id)
+            diagnostics.markStartup(.firstTranslation)
+            noteOutcomes([outcome.id])
         } else if let error = outcome.error {
             if error == .cancelled { return }
             rows[idx].translation = .failed(TranslationFailure(error: error, pair: outcome.pair))
-            seenAt[outcome.id] = nil
+            traces[outcome.id] = nil
             if error == .notInstalled {
                 if let pair = outcome.pair {
                     missingPairs.insert(pair)
@@ -494,13 +535,49 @@ final class SidebarViewModel {
         }
     }
 
-    /// Latency samples exist only for appended messages (see `ingest`): prefetched history is not "new".
-    private func recordLatency(_ id: MessageID) {
-        if let seen = seenAt.removeValue(forKey: id) {
-            let d = ContinuousClock.now - seen
-            diagnostics.recordTranslation(Double(d.components.seconds) * 1000
-                                          + Double(d.components.attoseconds) / 1e15)
+    // MARK: - Latency samples (D-027)
+
+    /// The messages were handed to the service (cache lookup + submit).
+    private func noteSubmitted(_ ids: [MessageID]) {
+        guard !traces.isEmpty else { return }
+        let now = ContinuousClock.now
+        for id in ids where traces[id] != nil && traces[id]?.submittedAt == nil { traces[id]?.submittedAt = now }
+    }
+
+    /// Translations were applied to `rows`. The overlay confirms what it drew (`noteDisplayed`); the sidebar
+    /// (and headless runs) render the rows on the next main-actor turn.
+    private func noteOutcomes(_ ids: Set<MessageID>) {
+        guard !ids.isEmpty else { return }
+        let now = ContinuousClock.now
+        for id in ids where traces[id] != nil { traces[id]?.outcomeAt = now }
+        guard headless || settings.displayMode == .sidebar else { return }
+        awaitingDisplay.formUnion(ids)
+        guard displayConfirmTask == nil else { return }
+        displayConfirmTask = Task { [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            self.displayConfirmTask = nil
+            let shown = self.awaitingDisplay
+            self.awaitingDisplay = []
+            self.diagnostics.markStartup(.firstDisplay)
+            self.noteDisplayed(shown)
         }
+    }
+
+    /// Called with the ids whose translation is now on screen (the inline overlay after each rebuild while it
+    /// is shown). Records one sample per traced message; traces displayed too late are dropped.
+    func noteDisplayed(_ ids: Set<MessageID>) {
+        guard !traces.isEmpty else { return }
+        let now = ContinuousClock.now
+        for id in ids {
+            guard let trace = traces[id], let outcomeAt = trace.outcomeAt else { continue }
+            traces[id] = nil
+            if now - outcomeAt <= Self.displayGrace, let b = trace.breakdown(displayedAt: now) {
+                diagnostics.recordTranslation(b)
+            }
+        }
+        // Translated but never shown in time (e.g. the chat window was covered): not a sample.
+        traces = traces.filter { _, t in t.outcomeAt.map { now - $0 <= Self.displayGrace } ?? true }
     }
 
     /// Numeric code for logs (engine error strings are never logged).

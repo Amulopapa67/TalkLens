@@ -17,7 +17,8 @@ struct AboutView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Image(systemName: "character.bubble").font(.system(size: 32))
+                Image(nsImage: LogoArt.colorImage(size: 56))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading) {
                     Text("TalkLens").font(.title2.weight(.semibold))
                     Text(tr(.aboutVersion, version)).font(.caption).foregroundStyle(.secondary)

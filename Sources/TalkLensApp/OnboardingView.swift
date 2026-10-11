@@ -92,8 +92,12 @@ struct OnboardingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(tr(.onboardingWelcome))
-                .font(.title2.weight(.semibold))
+            HStack(spacing: 12) {
+                Image(nsImage: LogoArt.colorImage(size: 48))
+                    .accessibilityHidden(true)
+                Text(tr(.onboardingWelcome))
+                    .font(.title2.weight(.semibold))
+            }
             Text(tr(.onboardingIntro))
                 .font(.callout)
                 .foregroundStyle(.secondary)

@@ -623,6 +623,9 @@ final class InlineOverlayController {
         translatedIDs = translated
         if state.labels != labels { state.labels = labels }
         if state.notes != notes { state.notes = notes }
+        // Latency samples end when the translation is drawn (D-027).
+        if !labels.isEmpty { diagnostics.markStartup(.firstDisplay) }
+        model.noteDisplayed(translated)
         if let hovered = hoveredID {
             if translated.contains(hovered) {
                 let popover = makePopover(hovered)

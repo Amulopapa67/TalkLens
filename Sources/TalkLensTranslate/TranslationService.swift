@@ -68,6 +68,8 @@ public struct TranslationServiceDiagnostics: Sendable, Equatable {
     public var outcomes = 0
     /// Current number of cached segments.
     public var cacheCount = 0
+    /// Warm-up engine calls (one fixed synthetic word, never user content).
+    public var warmUps = 0
     public init() {}
 }
 
@@ -205,8 +207,12 @@ public actor TranslationService {
     /// is cancelled (work it started keeps filling the cache); other channels are not affected. Texts already
     /// in flight for any channel are awaited, not sent again. Outcomes stream as they complete; the stream
     /// finishes when all are done.
+    ///
+    /// - immediate: skip the batch collect window (the submission holds a message that just arrived, or the
+    ///   first visible messages of a chat): nothing is waiting to be coalesced with it.
     public func submit(_ messages: [PreprocessedMessage],
-                       channel: String = TranslationService.defaultChannel) -> AsyncStream<TranslationOutcome> {
+                       channel: String = TranslationService.defaultChannel,
+                       immediate: Bool = false) -> AsyncStream<TranslationOutcome> {
         cancel(channel: channel)
         generation &+= 1
         let gen = generation
@@ -268,13 +274,55 @@ public actor TranslationService {
                                     source: source, target: target, pending: pending, resolved: resolved,
                                     needed: Set(pending.flatMap(\.keys)), driver: nil)
         if !queue.isEmpty {
+            let window = immediate ? 0 : batchWindowMilliseconds
             submission.driver = Task {
                 await self.drive(channel: channel, generation: gen, queue: queue, itemIDs: itemIDs,
-                                 languages: languages)
+                                 languages: languages, windowMilliseconds: window)
             }
         }
         submissions[channel] = submission
         return stream
+    }
+
+    /// Fixed synthetic warm-up word per source language family (never user content).
+    public static func warmUpText(for source: Locale.Language) -> String {
+        switch source.languageCode?.identifier ?? "" {
+        case "ko": return "안녕하세요"
+        case "ja": return "こんにちは"
+        case "zh": return "你好"
+        case "es": return "Hola"
+        case "fr": return "Bonjour"
+        case "de": return "Hallo"
+        case "ru": return "Привет"
+        case "vi": return "Xin chào"
+        case "th": return "สวัสดี"
+        case "id": return "Halo"
+        default: return "hello"
+        }
+    }
+
+    /// Pre-warms the engine for `source → target` (default: the fallback pair) by translating one fixed
+    /// synthetic word, so that the first real batch does not pay for session creation / model loading. Runs
+    /// through the engine lane (never in parallel with a real call) and the engine's own session store, so
+    /// the warmed session is the one reused later. Skipped (returns false) when the pair is not installed.
+    /// The result is discarded and not cached.
+    @discardableResult
+    public func warmUp(source: Locale.Language? = nil, target: Locale.Language? = nil) async -> Bool {
+        let source = source ?? self.source
+        let target = target ?? self.target
+        guard await cachedLanguageStatus(source: source, target: target) == .ready else { return false }
+        await acquireLane(channel: "warm-up")
+        defer { releaseLane() }
+        counters.warmUps += 1
+        let engine = self.engine
+        let item = TranslationItem(id: "warm-up", text: Self.warmUpText(for: source))
+        let stopwatch = Stopwatch()
+        let call = Task { try await engine.translate([item], source: source, target: target) }
+        let result = await Self.result(of: call, timeout: engineTimeout)
+        let ok: Bool
+        if case .success = result { ok = true } else { ok = false }
+        logger.info("warm-up ok=\(ok, privacy: .public) ms=\(Int(stopwatch.elapsedMilliseconds), privacy: .public)")
+        return ok
     }
 
     /// Cancels the submissions of every channel: their streams finish and not-yet-started batches are dropped.
@@ -339,10 +387,11 @@ public actor TranslationService {
     /// highest-priority waiting text goes first). A pair that is not installed fails its messages without an
     /// engine call.
     private func drive(channel: String, generation gen: UInt64, queue: [TranslationCacheKey],
-                       itemIDs: [TranslationCacheKey: String], languages: [String: Locale.Language]) async {
-        if batchWindowMilliseconds > 0 {
+                       itemIDs: [TranslationCacheKey: String], languages: [String: Locale.Language],
+                       windowMilliseconds: Int) async {
+        if windowMilliseconds > 0 {
             // Collect window: a resubmit during this time cancels us before anything is sent.
-            try? await Task.sleep(for: .milliseconds(batchWindowMilliseconds))
+            try? await Task.sleep(for: .milliseconds(windowMilliseconds))
         }
         var remaining = queue
         while !remaining.isEmpty {

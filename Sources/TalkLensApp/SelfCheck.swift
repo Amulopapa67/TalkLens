@@ -18,6 +18,8 @@ enum SelfCheck {
                                          target: settings.targetLocale)
         let model = SidebarViewModel(service: service, glossary: glossary.merged, settings: settings,
                                      diagnostics: diagnostics)
+        // No overlay here: a translation counts as displayed once it is applied.
+        model.headless = true
         // Constructed (not started) to make sure the live components initialise without side effects.
         let manager = SessionManager(reader: AXReader(), diagnostics: diagnostics)
         _ = manager.state
@@ -47,12 +49,20 @@ enum SelfCheck {
         // the incremental diff → preprocess → translate path and the latency bookkeeping.
         let synthKey = MessageIdentity.chatKey(forTitle: "self-check-synthetic")
         let base = Array(synthetic.dropLast())
+        func timing(_ trigger: ReadTrigger, rows: Int) -> ReadTiming {
+            let now = ContinuousClock.now
+            return ReadTiming(trigger: trigger, triggeredAt: now, readStartedAt: now, readEndedAt: now, rowsTotal: rows)
+        }
         model.ingest(snapshot: TranscriptSnapshot(chatKey: synthKey, messages: MessageIdentity.assign(base, chatKey: synthKey)),
-                     title: nil, animate: false)
+                     title: nil, animate: false, timing: timing(.other, rows: base.count))
         finished = await waitWithTimeout(model) && finished
+        // The appended row arrives through a (simulated) content event: one latency sample (D-027).
         model.ingest(snapshot: TranscriptSnapshot(chatKey: synthKey, messages: MessageIdentity.assign(synthetic, chatKey: synthKey)),
-                     title: nil, animate: false)
+                     title: nil, animate: false, timing: timing(.contentEvent, rows: synthetic.count))
         finished = await waitWithTimeout(model) && finished
+        // Let the display confirmation (next main-actor turn) record the sample.
+        await Task.yield()
+        await Task.yield()
         let s = model.counts
 
         let placement = PanelPlacement.place(window: CGRect(x: 200, y: 200, width: 600, height: 700),

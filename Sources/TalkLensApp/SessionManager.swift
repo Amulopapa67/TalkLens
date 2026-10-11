@@ -91,6 +91,8 @@ final class SessionManager: AXEventSink {
     private var unresolvedRetries = 0
     private var enumerationInFlight = false
     private var enumerationPending = false
+    /// The first enumeration after attaching tests only the focused window (read it first, D-027).
+    private var quickPassPending = true
     private var pollTask: Task<Void, Never>?
     private var pollCursor = 0
 
@@ -195,6 +197,7 @@ final class SessionManager: AXEventSink {
             return
         }
         observation = obs
+        quickPassPending = true
         let deadline = ContinuousClock.now + Self.registrationBudget
         let result = obs.add(Self.appNotifications + Self.appContentNotifications, to: appNode.element,
                              deadline: deadline)
@@ -279,9 +282,13 @@ final class SessionManager: AXEventSink {
             return
         }
         enumerationInFlight = true
+        let quick = quickPassPending && sessions.isEmpty
+        quickPassPending = false
+        diagnostics.activity.set("enumerate", busy: true)
         Task {
-            let outcome = await reader.enumerateChatWindows()
+            let outcome = await reader.enumerateChatWindows(focusedOnly: quick)
             enumerationInFlight = false
+            diagnostics.activity.set("enumerate", busy: false)
             apply(outcome)
             if enumerationPending {
                 enumerationPending = false
@@ -304,7 +311,10 @@ final class SessionManager: AXEventSink {
             scheduleEnumeration(after: .seconds(2))
             return
         case .windows(let found):
+            diagnostics.markStartup(.firstEnumeration)
             applyWindows(found)
+            // Launch fast path: the focused chat window's read is queued; now test the other windows.
+            if found.partial { scheduleEnumeration(after: .zero) }
         }
     }
 
@@ -338,7 +348,7 @@ final class SessionManager: AXEventSink {
         let kept = candidates.prefix(Self.maxSessions).map(\.info)
         let keptKeys = Set(kept.map(\.key))
         var changed = false
-        for session in sessions where !keptKeys.contains(session.key) {
+        for session in sessions where !found.partial && !keptKeys.contains(session.key) {
             removeSession(session, notify: false)
             changed = true
         }
@@ -351,6 +361,7 @@ final class SessionManager: AXEventSink {
                                       manager: self, geometryReader: geometryReader, diagnostics: diagnostics)
             session.focusSerial = focusHistory[info.key] ?? 0
             sessions.append(session)
+            diagnostics.markStartup(.firstSession)
             session.start(pid: pid, deadline: deadline)
             // Permission lost while registering: everything was torn down.
             guard observation != nil, !session.ended else { return }
@@ -364,7 +375,7 @@ final class SessionManager: AXEventSink {
         setState(sessions.isEmpty ? .noChatWindow : .tracking)
         if changed || focusChanged { onSessionsChanged?() }
         updatePolling()
-        if found.unresolved > 0, unresolvedRetries < Self.maxUnresolvedRetries {
+        if !found.partial, found.unresolved > 0, unresolvedRetries < Self.maxUnresolvedRetries {
             unresolvedRetries += 1
             unresolvedTask?.cancel()
             unresolvedTask = Task { [weak self] in
@@ -470,7 +481,7 @@ final class SessionManager: AXEventSink {
                 return a.visibleArea < b.visibleArea
             }!
             urgentReads.remove(ObjectIdentifier(next))
-            run(next)
+            run(next, followUp: false)
             return
         }
         // 2. Budgeted follow-ups, round-robin (least recently read first), never back to back.
@@ -493,7 +504,7 @@ final class SessionManager: AXEventSink {
                 }
             }!.session
             followUpDue[ObjectIdentifier(next)] = nil
-            run(next)
+            run(next, followUp: true)
             return
         }
         let earliest = waiting.map(\.due).min()!
@@ -510,7 +521,7 @@ final class SessionManager: AXEventSink {
         }
     }
 
-    private func run(_ session: ChatSession) {
+    private func run(_ session: ChatSession, followUp: Bool) {
         guard session.contentWanted else {
             // Hidden meanwhile: read once it can be seen again.
             session.readDirty = true
@@ -519,16 +530,21 @@ final class SessionManager: AXEventSink {
         }
         reading = session
         let requestedAt = ContinuousClock.now
-        let triggeredAt = session.readStarting(at: requestedAt)
+        let (triggeredAt, trigger) = session.readStarting(at: requestedAt, followUp: followUp)
         let resolveOnly = paused
         let window = session.window
         let reader = self.reader
+        if !resolveOnly { diagnostics.markStartup(.firstReadStarted) }
+        diagnostics.activity.set("read", busy: true)
         Task {
             let outcome = resolveOnly ? await reader.resolveWindow(window)
                 : await reader.read(window: window, requestedAt: requestedAt)
             reading = nil
             lastReadEndedAt = .now
-            if !session.ended { session.handle(outcome, requestedAt: requestedAt, triggeredAt: triggeredAt) }
+            diagnostics.activity.set("read", busy: false)
+            if !session.ended {
+                session.handle(outcome, requestedAt: requestedAt, triggeredAt: triggeredAt, trigger: trigger)
+            }
             pump()
         }
     }
@@ -567,7 +583,7 @@ final class SessionManager: AXEventSink {
         let interval = session.state == .tracking ? Self.pollInterval : Self.untrackedPollInterval
         if let last = session.lastFullReadAt, now - last < interval { return }
         diagnostics.recordPollRead()
-        session.requestRead()
+        session.requestRead(trigger: .poll)
     }
 
     // MARK: - Permission / process
@@ -658,7 +674,7 @@ final class SessionManager: AXEventSink {
             } else {
                 scheduleEnumeration()
                 if let focused = focusedSession {
-                    if focused.readDirty { focused.requestRead() } else { focused.probeAndMaybeRead() }
+                    if focused.readDirty { focused.requestRead() } else { focused.probeAndMaybeRead(trigger: .other) }
                 }
             }
         }

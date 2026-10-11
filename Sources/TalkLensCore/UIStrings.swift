@@ -16,7 +16,7 @@ public enum UIKey: String, CaseIterable, Sendable {
     case edgeRight, edgeLeft, edgeInside
     // Status line and states
     case statusLine, statePaused, stateStarting, stateNoPermission, stateKakaoNotRunning, stateNoChatWindow
-    case stateTranscriptNotFound, stateFollowingOne, stateFollowingMany, stateCounts, stateMissingPairs
+    case stateTranscriptNotFound, stateFollowingOne, stateFollowingMany, stateCounts, stateMissingPairs, stateCovered
     // Window titles
     case windowOnboarding, windowSettings, windowDownload
     // Settings
@@ -246,6 +246,9 @@ public enum UIStrings {
         case .stateMissingPairs:
             return s("缺 {0} 个语言对", "缺 {0} 個語言組合", "Missing language pairs: {0}", "없는 언어 쌍 {0}개",
                      "未導入の言語ペア {0} 件")
+        case .stateCovered:
+            return s("窗口被遮挡，后台继续翻译", "視窗被遮擋，背景繼續翻譯", "window covered, translating in background",
+                     "창이 가려짐 · 백그라운드에서 번역 중", "ウィンドウが隠れています・バックグラウンドで翻訳中")
 
         // Window titles
         case .windowOnboarding:

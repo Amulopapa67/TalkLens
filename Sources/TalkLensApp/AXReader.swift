@@ -147,6 +147,8 @@ struct ChatWindowEnumeration: Sendable {
     var focused: AXElementKey?
     /// Windows whose chat-window test was negative but may change (e.g. still loading): worth re-checking.
     var unresolved: Int
+    /// Only the focused window was tested (launch fast path); a full enumeration should follow.
+    var partial = false
 }
 
 enum EnumerationOutcome: Sendable {
@@ -201,12 +203,23 @@ actor AXReader {
 
     /// Every open (not minimized) chat window. IPC: the window list, the focused window, one batched
     /// geometry read per window, and a (memoised, bounded) chat-window test for windows not seen before.
-    func enumerateChatWindows() -> EnumerationOutcome {
+    ///
+    /// - focusedOnly: launch fast path: when KakaoTalk's focused window is a chat window, return just that one
+    ///   (`partial`) so it can be read before the other windows are tested; otherwise enumerate everything.
+    func enumerateChatWindows(focusedOnly: Bool = false) -> EnumerationOutcome {
         guard KakaoProcess.isAccessibilityTrusted else { return .failure(.notTrusted) }
         guard let app = KakaoProcess.applicationNode() else { return .failure(.notRunning) }
         // A failed window-list read (busy KakaoTalk, IPC timeout) must not look like "every window closed".
         guard AXQuickRead.count(app.element, "AXWindows") != nil else { return .failure(.noChatWindow) }
         let now = ContinuousClock.now
+        if focusedOnly, let window = app.focusedWindow {
+            let key = window.elementIdentity
+            let g = window.currentGeometry()
+            if !g.isMinimized, chatKind(window, key: key, frame: g.frame, now: now) == .chat {
+                let info = ChatWindowInfo(window: AXElementRef(element: window.element), key: key, frame: g.frame)
+                return .windows(ChatWindowEnumeration(chatWindows: [info], focused: key, unresolved: 0, partial: true))
+            }
+        }
         var result = ChatWindowEnumeration(chatWindows: [], focused: nil, unresolved: 0)
         var present = Set<AXElementKey>()
         for window in app.windows {

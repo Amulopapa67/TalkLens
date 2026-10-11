@@ -11,6 +11,8 @@ private let logger = Logger.talkLens("app")
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var controller: AppController?
     private var statusItem: NSStatusItem?
+    private var statusVariant: LogoArt.StatusVariant?
+    private var statusImages: [LogoArt.StatusVariant: NSImage] = [:]
 
     private let statusLineItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let pauseItem = NSMenuItem(title: "", action: #selector(togglePaused), keyEquivalent: "p")
@@ -33,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.controller = controller
         setUpStatusItem()
         controller.onUILanguageChange = { [weak self] in self?.rebuildMenu() }
+        controller.onStatusIconChange = { [weak self] in self?.updateStatusIcon() }
         controller.start()
     }
 
@@ -46,14 +49,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        if let button = item.button {
-            let image = NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "TalkLens")
-            image?.isTemplate = true
-            button.image = image
-            button.toolTip = "TalkLens"
-        }
+        item.button?.toolTip = "TalkLens"
         statusItem = item
+        updateStatusIcon()
         rebuildMenu()
+    }
+
+    /// Monochrome logo (template) with the paused / busy / attention variant of the current state.
+    private func updateStatusIcon() {
+        guard let button = statusItem?.button else { return }
+        let variant = controller?.statusIconVariant ?? .normal
+        if variant != statusVariant {
+            statusVariant = variant
+            let image = statusImages[variant] ?? LogoArt.statusImage(variant)
+            statusImages[variant] = image
+            button.image = image
+        }
+        if let controller { button.toolTip = "TalkLens — " + controller.menuStatusLine }
     }
 
     /// Builds the status menu in the current UI language; called at launch and after every language change.
@@ -146,6 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         updateDynamicItems()
+        updateStatusIcon()
     }
 
     /// Titles and check marks that depend on the current state.

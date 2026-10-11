@@ -44,6 +44,8 @@ final class AppController {
     private var kakaoPID: pid_t?
     /// Called after the UI language changed (the status menu is rebuilt by AppDelegate).
     var onUILanguageChange: (@MainActor () -> Void)?
+    /// Called when the menu bar icon variant may have changed (AppDelegate redraws it when it did).
+    var onStatusIconChange: (@MainActor () -> Void)?
     /// Occlusion is re-checked this often while an overlay is shown (other apps' windows move without any
     /// notification to us), and at the slow rate while one could be shown but its chat window is hidden.
     static let occlusionInterval: Duration = .milliseconds(250)
@@ -92,6 +94,7 @@ final class AppController {
         Localizer.shared.onChange = { [weak self] in self?.uiLanguageChanged() }
         manager.makeModel = { [weak self] channel in self?.makeModel(channel: channel) }
         manager.onStateChange = { [weak self] state in self?.managerStateChanged(state) }
+        diagnostics.activity.onChange = { [weak self] _ in self?.onStatusIconChange?() }
         manager.onSessionsChanged = { [weak self] in self?.sessionsChanged() }
         manager.onSessionGeometry = { [weak self] session in self?.geometryChanged(session) }
         manager.onSessionStateChange = { [weak self] _ in self?.updatePanelVisibility() }
@@ -102,6 +105,8 @@ final class AppController {
 
         idleModel.setPaused(settings.paused)
         manager.setPaused(settings.paused)
+        // Warm Apple Translation up for the configured pair while the chat windows are enumerated and read.
+        warmUpTranslation()
         manager.start()
         updatePanelVisibility()
 
@@ -133,6 +138,22 @@ final class AppController {
         let status = await service.status()
         engineStatus = status
         for model in allModels { model.setEngineStatus(status) }
+        onStatusIconChange?()
+    }
+
+    /// One fixed synthetic word through the engine (inside the TranslationService actor, through the engine's
+    /// session store), so the first real batch reuses a warm session. Skipped when the pair is not installed
+    /// or translation is paused. Never user content.
+    private func warmUpTranslation() {
+        guard !settings.paused else { return }
+        let service = self.service
+        let diagnostics = self.diagnostics
+        diagnostics.activity.set("warm-up", busy: true)
+        Task {
+            let warmed = await service.warmUp()
+            diagnostics.activity.set("warm-up", busy: false)
+            if warmed { diagnostics.markStartup(.warmUp) }
+        }
     }
 
     /// Every 30 s, log the in-memory timing summary (numbers only) so PERF.md can be filled from `log show`.
@@ -182,6 +203,7 @@ final class AppController {
         idleModel.setTrackerStatus(status)
         if state != .tracking { panel?.place(windowAX: nil, inputAX: nil) }
         updatePanelVisibility()
+        onStatusIconChange?()
     }
 
     /// Sessions were created / ended or the focused one changed: the sidebar follows the focused session and
@@ -242,12 +264,15 @@ final class AppController {
             let overlayActive = candidate && session.state == .tracking && chatVisible
             session.inline.setActive(overlayActive)
             let isFocused = session === focused
-            // Nothing is read or translated while nothing of it can be seen; the session reads once on return.
+            // Read and translate whatever is on the current Space even while it is fully covered or KakaoTalk is
+            // in the background (reads are incremental and cheap), so translations are ready the moment the
+            // window shows; only drawing is suppressed (D-027). Windows on another Space / minimized are not read
+            // (sessions end or wait); the session reads once on return.
             let wanted: Bool
             if inlineMode {
-                wanted = settings.sidebarVisible && (chatVisible || (front && isFocused))
+                wanted = settings.sidebarVisible && (session.occlusionState.onScreen || (front && isFocused))
             } else {
-                wanted = settings.sidebarVisible && isFocused && (front || settings.pinned)
+                wanted = settings.sidebarVisible && isFocused
             }
             session.setContentWanted(wanted)
             anyCandidate = anyCandidate || candidate
@@ -347,6 +372,7 @@ final class AppController {
             for model in allModels { model.setPaused(settings.paused) }
             manager.setPaused(settings.paused)
             updatePanelVisibility()
+            onStatusIconChange?()
         case .uiLanguage:
             Localizer.shared.apply(settings.uiLanguage)
             // A switch between "follow system" and the language it resolves to changes no text but the
@@ -462,9 +488,22 @@ final class AppController {
             let windows = manager.sessions.count
             var parts = [windows > 1 ? tr(.stateFollowingMany, windows) : tr(.stateFollowingOne),
                          tr(.stateCounts, c.rows, c.done)]
+            if isInlineMode, focused.occlusionState.fullyCovered { parts.append(tr(.stateCovered)) }
             let missing = missingPairs.count
             if missing > 0 { parts.append(tr(.stateMissingPairs, missing)) }
             return parts.joined(separator: " · ")
         }
+    }
+
+    /// Menu bar icon variant: attention (no permission / languages missing) > paused > busy > normal.
+    var statusIconVariant: LogoArt.StatusVariant {
+        if manager.state == .noPermission { return .attention }
+        switch engineStatus {
+        case .needsDownload?, .unsupported?: return .attention
+        default: break
+        }
+        if !missingPairs.isEmpty { return .attention }
+        if settings.paused { return .paused }
+        return diagnostics.activity.shown ? .active : .normal
     }
 }
