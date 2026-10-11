@@ -171,15 +171,20 @@ public struct PreprocessedMessage: Hashable, Sendable {
     public let chips: [GlossaryChip]
     /// Short display note for messages that are not machine-translated (e.g. "哈哈（笑）" for ㅋㅋㅋ).
     public let note: String?
+    /// Catalog id of the source language used for this message ("ko", "ja", …; detected per message when the
+    /// source is auto). nil when the message is not translated, or for callers that predate D-023 — the
+    /// translation service then uses its own source.
+    public let sourceLanguage: String?
 
     public init(message: ChatMessage, kind: MessageKind, textForMT: String?, segments: [MTSegment],
-                chips: [GlossaryChip], note: String?) {
+                chips: [GlossaryChip], note: String?, sourceLanguage: String? = nil) {
         self.message = message
         self.kind = kind
         self.textForMT = textForMT
         self.segments = segments
         self.chips = chips
         self.note = note
+        self.sourceLanguage = sourceLanguage
     }
 }
 

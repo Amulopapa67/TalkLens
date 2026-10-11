@@ -20,18 +20,23 @@ public struct TranslationOutcome: Sendable, Equatable {
     public let fromCache: Bool
     /// Time from submit to result, milliseconds.
     public let latencyMilliseconds: Double
+    /// Language pair used for this message (catalog ids), e.g. ja→zh-Hans for an auto-detected Japanese
+    /// message. Lets the UI name the pair that needs a download.
+    public let pair: LanguagePair?
 
     public init(id: MessageID, text: String?, error: TranslationEngineError?, fromCache: Bool,
-                latencyMilliseconds: Double) {
+                latencyMilliseconds: Double, pair: LanguagePair? = nil) {
         self.id = id
         self.text = text
         self.error = error
         self.fromCache = fromCache
         self.latencyMilliseconds = latencyMilliseconds
+        self.pair = pair
     }
 }
 
-/// Cache key: (engine id, source, target, normalized segment text).
+/// Cache key: (engine id, source, target, normalized segment text). `source` is the per-message source
+/// (detected language when the source is auto), so the same text from two languages never collides.
 public struct TranslationCacheKey: Hashable, Sendable {
     public let engineID: String
     public let source: String
@@ -68,6 +73,7 @@ public struct TranslationServiceDiagnostics: Sendable, Equatable {
 
 public actor TranslationService {
     public let engine: any TranslationEngine
+    /// Fallback source for messages without `PreprocessedMessage.sourceLanguage` (and for `status()`).
     public private(set) var source: Locale.Language
     public private(set) var target: Locale.Language
     public let batchSize: Int
@@ -92,11 +98,16 @@ public actor TranslationService {
     /// Channel whose waiting batch gets the engine lane first (the focused chat window).
     private var preferredChannel: String?
     private var counters = TranslationServiceDiagnostics()
+    /// Engine status per (source, target) maximal identifiers: `.ready` is kept until invalidated, anything
+    /// else is re-checked after `languageStatusRetry`.
+    private var languageStatuses: [String: (status: EngineStatus, at: ContinuousClock.Instant)] = [:]
+    static let languageStatusRetry: Duration = .seconds(5)
     private let logger = Logger(subsystem: TranslateLog.subsystem, category: "translate")
 
     private struct PendingMessage {
         let message: PreprocessedMessage
         let keys: [TranslationCacheKey]
+        let pair: LanguagePair
     }
 
     private struct Submission {
@@ -151,8 +162,21 @@ public actor TranslationService {
     /// Number of channels with a live submission (numbers only, for diagnostics).
     public var activeChannelCount: Int { submissions.count }
 
+    /// Status of the fallback pair (service source → target).
     public func status() async -> EngineStatus {
-        await engine.status(source: source, target: target)
+        await status(source: source, target: target)
+    }
+
+    /// Status of one pair, checked now (the result also refreshes the per-pair cache used before engine calls).
+    public func status(source: Locale.Language, target: Locale.Language) async -> EngineStatus {
+        let s = await engine.status(source: source, target: target)
+        languageStatuses[Self.pairKey(source, target)] = (s, .now)
+        return s
+    }
+
+    /// Forget cached per-pair statuses (call after languages were downloaded).
+    public func invalidateLanguageStatus() {
+        languageStatuses.removeAll()
     }
 
     public var diagnostics: TranslationServiceDiagnostics {
@@ -166,10 +190,11 @@ public actor TranslationService {
         guard message.kind.needsTranslation else { return nil }
         let texts = message.translatableTexts
         guard !texts.isEmpty else { return nil }
+        let src = sourceLanguage(for: message)
         var values: [String] = []
         values.reserveCapacity(texts.count)
         for t in texts {
-            guard let v = cache.peek(key(for: t)) else { return nil }
+            guard let v = cache.peek(key(for: t, source: src)) else { return nil }
             values.append(v)
         }
         return message.assemble(translations: values)
@@ -193,6 +218,7 @@ public actor TranslationService {
         var queue: [TranslationCacheKey] = []
         var queued: Set<TranslationCacheKey> = []
         var itemIDs: [TranslationCacheKey: String] = [:]
+        var languages: [String: Locale.Language] = [:]
         var seenMessages: Set<MessageID> = []
         var cachedCount = 0
 
@@ -200,7 +226,10 @@ public actor TranslationService {
             guard m.kind.needsTranslation, seenMessages.insert(m.message.id).inserted else { continue }
             let texts = m.translatableTexts
             guard !texts.isEmpty else { continue }
-            let keys = texts.map { key(for: $0) }
+            let src = sourceLanguage(for: m)
+            languages[src.maximalIdentifier] = src
+            let pair = LanguagePair(source: LanguageCatalog.pairID(src), target: LanguageCatalog.pairID(target))
+            let keys = texts.map { key(for: $0, source: src) }
             var complete = true
             for k in keys where resolved[k] == nil {
                 if let v = cache.get(k) {
@@ -213,11 +242,11 @@ public actor TranslationService {
             }
             if complete {
                 cachedCount += 1
-                yield(outcome(for: m, keys: keys, resolved: resolved, fromCache: true, stopwatch: stopwatch),
+                yield(outcome(for: m, keys: keys, resolved: resolved, fromCache: true, stopwatch: stopwatch, pair: pair),
                       to: continuation)
                 continue
             }
-            pending.append(PendingMessage(message: m, keys: keys))
+            pending.append(PendingMessage(message: m, keys: keys, pair: pair))
             for (i, k) in keys.enumerated()
             where resolved[k] == nil && !inFlight.contains(k) && queued.insert(k).inserted {
                 queue.append(k)
@@ -240,7 +269,8 @@ public actor TranslationService {
                                     needed: Set(pending.flatMap(\.keys)), driver: nil)
         if !queue.isEmpty {
             submission.driver = Task {
-                await self.drive(channel: channel, generation: gen, queue: queue, itemIDs: itemIDs)
+                await self.drive(channel: channel, generation: gen, queue: queue, itemIDs: itemIDs,
+                                 languages: languages)
             }
         }
         submissions[channel] = submission
@@ -266,9 +296,28 @@ public actor TranslationService {
 
     // MARK: - Internals
 
-    private func key(for text: String) -> TranslationCacheKey {
+    private func key(for text: String, source: Locale.Language) -> TranslationCacheKey {
         TranslationCacheKey(engineID: engine.id, source: source.maximalIdentifier,
                             target: target.maximalIdentifier, text: text)
+    }
+
+    /// The message's own source (auto-detected or fixed in the preprocessor), else the service source.
+    private func sourceLanguage(for message: PreprocessedMessage) -> Locale.Language {
+        message.sourceLanguage.map { Locale.Language(identifier: $0) } ?? source
+    }
+
+    private static func pairKey(_ source: Locale.Language, _ target: Locale.Language) -> String {
+        source.maximalIdentifier + "|" + target.maximalIdentifier
+    }
+
+    /// Cached engine status for a pair (re-checked when stale or not ready for a while).
+    private func cachedLanguageStatus(source: Locale.Language, target: Locale.Language) async -> EngineStatus {
+        let k = Self.pairKey(source, target)
+        if let entry = languageStatuses[k],
+           entry.status == .ready || ContinuousClock.now - entry.at < Self.languageStatusRetry {
+            return entry.status
+        }
+        return await status(source: source, target: target)
     }
 
     private func cancelAllChannels() {
@@ -285,23 +334,49 @@ public actor TranslationService {
         cancel(channel: channel)
     }
 
+    /// Sends the queue in batches. Every batch has a single source language (texts of several sources — auto
+    /// detect — are grouped by source; within a source the priority order is kept, and the source of the
+    /// highest-priority waiting text goes first). A pair that is not installed fails its messages without an
+    /// engine call.
     private func drive(channel: String, generation gen: UInt64, queue: [TranslationCacheKey],
-                       itemIDs: [TranslationCacheKey: String]) async {
+                       itemIDs: [TranslationCacheKey: String], languages: [String: Locale.Language]) async {
         if batchWindowMilliseconds > 0 {
             // Collect window: a resubmit during this time cancels us before anything is sent.
             try? await Task.sleep(for: .milliseconds(batchWindowMilliseconds))
         }
-        var index = 0
-        while index < queue.count {
+        var remaining = queue
+        while !remaining.isEmpty {
             guard !Task.isCancelled, let sub = submissions[channel], sub.generation == gen else { return }
             var batch: [TranslationCacheKey] = []
-            while index < queue.count, batch.count < batchSize {
-                let k = queue[index]
-                index += 1
+            var rest: [TranslationCacheKey] = []
+            var batchSource: String?
+            for k in remaining {
                 if sub.resolved[k] != nil || inFlight.contains(k) || !sub.needed.contains(k) { continue }
-                batch.append(k)
+                if batch.count < batchSize, batchSource == nil || batchSource == k.source {
+                    batchSource = k.source
+                    batch.append(k)
+                } else {
+                    rest.append(k)
+                }
             }
-            if batch.isEmpty { continue }
+            remaining = rest
+            guard let batchSource, !batch.isEmpty else { continue }
+            let source = languages[batchSource] ?? Locale.Language(identifier: batchSource)
+            let target = sub.target
+
+            let pairStatus = await cachedLanguageStatus(source: source, target: target)
+            guard !Task.isCancelled, let checked = submissions[channel], checked.generation == gen else { return }
+            if pairStatus != .ready {
+                let error: TranslationEngineError
+                switch pairStatus {
+                case .unsupported(let reason): error = .unsupported(reason)
+                default: error = .notInstalled
+                }
+                logger.debug("batch skipped items=\(batch.count, privacy: .public) pair not ready")
+                deliver(successes: [:], failed: Set(batch), error: error)
+                continue
+            }
+
             await acquireLane(channel: channel)
             // Another channel's call may have resolved (or started) some of these texts while we waited.
             guard !Task.isCancelled, let fresh = submissions[channel], fresh.generation == gen else {
@@ -313,7 +388,7 @@ public actor TranslationService {
                 releaseLane()
                 continue
             }
-            await runBatch(batch, itemIDs: itemIDs, source: fresh.source, target: fresh.target)
+            await runBatch(batch, itemIDs: itemIDs, source: source, target: fresh.target)
             releaseLane()
         }
     }
@@ -373,6 +448,10 @@ public actor TranslationService {
             counters.failedCalls += 1
             failure = Self.engineError(error)
             if failure == Self.timeoutError { counters.timeouts += 1 }
+            if failure == .notInstalled {
+                // Re-check this pair before the next call instead of trusting a cached `.ready`.
+                languageStatuses[Self.pairKey(source, target)] = (.needsDownload, .now)
+            }
             failed = Set(keys)
         }
         logger.debug("batch items=\(items.count, privacy: .public) failed=\(failed.count, privacy: .public) ms=\(stopwatch.elapsedMilliseconds, privacy: .public)")
@@ -397,11 +476,11 @@ public actor TranslationService {
             for p in sub.pending {
                 if p.keys.contains(where: failed.contains) {
                     yield(TranslationOutcome(id: p.message.message.id, text: nil, error: error, fromCache: false,
-                                             latencyMilliseconds: sub.stopwatch.elapsedMilliseconds),
+                                             latencyMilliseconds: sub.stopwatch.elapsedMilliseconds, pair: p.pair),
                           to: sub.continuation)
                 } else if p.keys.allSatisfy({ sub.resolved[$0] != nil }) {
                     yield(outcome(for: p.message, keys: p.keys, resolved: sub.resolved, fromCache: false,
-                                  stopwatch: sub.stopwatch), to: sub.continuation)
+                                  stopwatch: sub.stopwatch, pair: p.pair), to: sub.continuation)
                 } else {
                     remaining.append(p)
                 }
@@ -422,11 +501,12 @@ public actor TranslationService {
 
     private func outcome(for m: PreprocessedMessage, keys: [TranslationCacheKey],
                          resolved: [TranslationCacheKey: String], fromCache: Bool,
-                         stopwatch: Stopwatch) -> TranslationOutcome {
+                         stopwatch: Stopwatch, pair: LanguagePair) -> TranslationOutcome {
         let values = keys.compactMap { resolved[$0] }
         let text = values.count == keys.count ? m.assemble(translations: values) : nil
         return TranslationOutcome(id: m.message.id, text: text, error: text == nil ? .failed("assembly") : nil,
-                                  fromCache: fromCache, latencyMilliseconds: stopwatch.elapsedMilliseconds)
+                                  fromCache: fromCache, latencyMilliseconds: stopwatch.elapsedMilliseconds,
+                                  pair: pair)
     }
 
     private func yield(_ outcome: TranslationOutcome, to continuation: AsyncStream<TranslationOutcome>.Continuation) {

@@ -77,6 +77,9 @@ final class SidebarViewModel {
     private(set) var resetTick = 0
     /// Rows whose original-text visibility is flipped relative to the global setting.
     var toggledOriginals: Set<MessageID> = []
+    /// Language pairs whose messages failed because the pair is not installed (auto-detected sources), shown
+    /// as one aggregated banner with a download button. Cleared when the languages or the chat change.
+    private(set) var missingPairs: Set<LanguagePair> = []
 
     /// Upper bound on messages submitted for translation per chat (visible ones always come first).
     static let translationCap = TranslationPriority.defaultCap
@@ -108,7 +111,8 @@ final class SidebarViewModel {
         self.settings = settings
         self.diagnostics = diagnostics
         self.glossary = glossary
-        self.preprocessor = ChatPreprocessor(glossary: glossary, targetLanguage: settings.targetLanguage,
+        self.preprocessor = ChatPreprocessor(glossary: glossary, sourceLanguage: settings.sourceLanguageID,
+                                             targetLanguage: settings.targetLanguage,
                                              glossaryEnabled: settings.glossaryEnabled)
     }
 
@@ -284,20 +288,40 @@ final class SidebarViewModel {
 
     // MARK: - Settings changes
 
-    /// Target language changed: retarget the service, re-preprocess and re-translate the loaded set.
-    func retarget(_ languageID: String) {
+    /// Source or target language changed: update the (shared) service, re-preprocess and re-translate the
+    /// loaded set. The cache key holds the per-message source and the target, so nothing needs flushing.
+    func languagesChanged() {
         let previous = translateTask
         previous?.cancel()
         outstanding = []
+        missingPairs = []
         let service = self.service
+        let source = settings.fallbackSourceLocale
+        let target = settings.targetLocale
         translateTask = Task { [weak self] in
             await previous?.value
-            await service.setTarget(Locale.Language(identifier: languageID))
+            await service.setSource(source)
+            await service.setTarget(target)
             let status = await service.status()
             guard let self else { return }
             self.engineStatus = status
             self.rebuildPreprocessor()
         }
+    }
+
+    /// Languages were downloaded: failed rows become pending again and are re-submitted.
+    func retryFailed() {
+        missingPairs = []
+        var updated = rows
+        var changed = false
+        for i in updated.indices {
+            if case .failed = updated[i].translation {
+                updated[i].translation = .pending
+                changed = true
+            }
+        }
+        if changed { rows = updated }
+        scheduleTranslation(force: true)
     }
 
     /// Glossary contents or the glossary switch changed.
@@ -307,8 +331,10 @@ final class SidebarViewModel {
     }
 
     private func rebuildPreprocessor() {
-        preprocessor = ChatPreprocessor(glossary: glossary, targetLanguage: settings.targetLanguage,
+        preprocessor = ChatPreprocessor(glossary: glossary, sourceLanguage: settings.sourceLanguageID,
+                                        targetLanguage: settings.targetLanguage,
                                         glossaryEnabled: settings.glossaryEnabled)
+        missingPairs = []
         prepared = [:]
         seenAt = [:]
         for message in messages { prepared[message.id] = preprocessor.process(message) }
@@ -347,6 +373,7 @@ final class SidebarViewModel {
         prepared = [:]
         seenAt = [:]
         toggledOriginals = []
+        missingPairs = []
         visibleIDs = []
         setRows([])
         if newKey == nil { chatTitle = nil }
@@ -443,9 +470,15 @@ final class SidebarViewModel {
             recordLatency(outcome.id)
         } else if let error = outcome.error {
             if error == .cancelled { return }
-            rows[idx].translation = .failed(Self.describe(error))
+            rows[idx].translation = .failed(FailureReason.describe(error, pair: outcome.pair))
             seenAt[outcome.id] = nil
-            if error == .notInstalled { engineStatus = .needsDownload }
+            if error == .notInstalled {
+                if let pair = outcome.pair {
+                    missingPairs.insert(pair)
+                } else {
+                    engineStatus = .needsDownload
+                }
+            }
             logger.info("mt error code=\(Self.errorCode(error))")
         }
     }
@@ -457,12 +490,6 @@ final class SidebarViewModel {
             diagnostics.recordTranslation(Double(d.components.seconds) * 1000
                                           + Double(d.components.attoseconds) / 1e15)
         }
-    }
-
-    static func describe(_ error: TranslationEngineError) -> String {
-        if error == .notInstalled { return "翻译语言未安装" }
-        if case .unsupported = error { return "当前系统不支持此语言对" }
-        return "翻译失败"
     }
 
     /// Numeric code for logs (engine error strings are never logged).

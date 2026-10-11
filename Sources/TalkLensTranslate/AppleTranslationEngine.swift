@@ -3,13 +3,15 @@
 //
 // Routes:
 //   - macOS 26+: UI-less `TranslationSession(installedSource:target:)` (requires installed languages);
-//     on 26.4+ with `preferredStrategy: .lowLatency`. One session per (source, target), held in an actor.
+//     on 26.4+ with `preferredStrategy: .lowLatency`. One session per (source, target) pair (several pairs
+//     live side by side when the source is auto-detected), held in an actor.
 //   - macOS 15–25: `TranslationHost` (hidden SwiftUI `.translationTask` host), only inside a running app.
 // Never logs text; only counts, durations and error codes.
 
 import AppKit
 import Foundation
 import os
+import TalkLensCore
 @preconcurrency import Translation
 
 /// Language availability as reported by `LanguageAvailability`, decoupled from the framework type so the
@@ -97,6 +99,20 @@ public struct AppleTranslationEngine: TranslationEngine {
         }
     }
 
+    /// Catalog ids that Apple Translation supports on this Mac (`LanguageAvailability().supportedLanguages`),
+    /// or nil when the list is empty (callers fall back to the static catalog).
+    public static func supportedCatalogLanguages() async -> Set<String>? {
+        let languages = await LanguageAvailability().supportedLanguages
+        let ids = Set(languages.compactMap(LanguageCatalog.canonicalID))
+        return ids.isEmpty ? nil : ids
+    }
+
+    /// Public wrapper of the availability check for UI (settings) — no session is created.
+    public static func pairState(source: String, target: String) async -> AppleLanguageState {
+        await languageState(source: Locale.Language(identifier: source), target: Locale.Language(identifier: target),
+                            preferLowLatency: true)
+    }
+
     static func currentRoute() async -> AppleSessionRoute {
         if #available(macOS 26.0, *) { return .uiLess }
         let appRunning = await MainActor.run { NSApp != nil && NSApp.isRunning }
@@ -142,32 +158,43 @@ public struct AppleTranslationEngine: TranslationEngine {
     }
 }
 
-/// Holds the macOS 26+ UI-less session for the current language pair; recreated when the pair changes or
-/// after a cancellation.
+/// Holds the macOS 26+ UI-less sessions, one per (source, target) pair — with auto-detected sources several
+/// pairs are used side by side (D-023). At most `maxSessions` are kept (least recently used is dropped); a
+/// session is recreated after a cancellation or a not-installed error.
 actor AppleSessionStore {
+    static let maxSessions = 4
     private let preferLowLatency: Bool
-    private var session: TranslationSession?
-    private var pair: (source: String, target: String)?
+    private var sessions: [String: TranslationSession] = [:]
+    /// Pair keys, least recently used first.
+    private var usage: [String] = []
     private let logger = Logger(subsystem: TranslateLog.subsystem, category: "apple-engine")
 
     init(preferLowLatency: Bool) {
         self.preferLowLatency = preferLowLatency
     }
 
+    /// Number of live sessions (tests / diagnostics).
+    var sessionCount: Int { sessions.count }
+
     func translate(_ items: [TranslationItem], source: Locale.Language,
                    target: Locale.Language) async throws -> [TranslationResult] {
         guard #available(macOS 26.0, *) else {
             throw TranslationEngineError.unsupported(AppleTranslationEngine.hostRequiredReason)
         }
-        let key = (source.maximalIdentifier, target.maximalIdentifier)
+        let key = source.maximalIdentifier + "|" + target.maximalIdentifier
         let current: TranslationSession
-        if let s = session, let p = pair, p.source == key.0, p.target == key.1 {
+        if let s = sessions[key] {
             current = s
         } else {
             current = makeSession(source: source, target: target)
-            session = current
-            pair = (key.0, key.1)
+            sessions[key] = current
+            if sessions.count > Self.maxSessions, let oldest = usage.first(where: { $0 != key }) {
+                sessions[oldest] = nil
+                usage.removeAll { $0 == oldest }
+            }
         }
+        usage.removeAll { $0 == key }
+        usage.append(key)
         let requests = items.map { TranslationSession.Request(sourceText: $0.text, clientIdentifier: $0.id) }
         let watch = DispatchTime.now().uptimeNanoseconds
         do {
@@ -181,8 +208,8 @@ actor AppleSessionStore {
             logger.debug("batch failed items=\(items.count, privacy: .public)")
             if mapped == .cancelled || mapped == .notInstalled {
                 // A cancelled session cannot be reused; a not-installed one is retried after download.
-                session = nil
-                pair = nil
+                sessions[key] = nil
+                usage.removeAll { $0 == key }
             }
             throw mapped
         }

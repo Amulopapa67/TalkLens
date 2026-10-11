@@ -3,25 +3,49 @@
 
 import SwiftUI
 import TalkLensCore
+import TalkLensTranslate
 
 struct SettingsView: View {
     @Bindable var settings: AppSettings
     let glossary: GlossaryStore
     let loginItem: LoginItemController
     let reloadGlossary: @MainActor () -> Void
+    let languages: LanguageStatusModel
+    /// Called after a download prompt reports the pair installed.
+    let languagesInstalled: @MainActor () -> Void
+    @State private var downloadPair: LanguagePair?
 
     var body: some View {
         Form {
             Section("翻译") {
-                Picker("目标语言", selection: $settings.targetLanguage) {
-                    ForEach(AppSettings.targetLanguages, id: \.id) { option in
+                Picker("原文语言", selection: $settings.sourceLanguage) {
+                    ForEach(LanguageCatalog.sourceOptions(supported: languages.supported)) { option in
                         Text(option.name).tag(option.id)
                     }
                 }
+                Picker("目标语言", selection: $settings.targetLanguage) {
+                    ForEach(LanguageCatalog.targetOptions(supported: languages.supported)) { option in
+                        Text(option.name).tag(option.id)
+                    }
+                }
+                languageStatusRows
+                if let pair = downloadPair {
+                    LanguageDownloadPrompt(source: Locale.Language(identifier: pair.source),
+                                           target: Locale.Language(identifier: pair.target)) { installed in
+                        downloadPair = nil
+                        if installed { languagesInstalled() }
+                        Task { await languages.refresh(source: settings.sourceLanguage, target: settings.targetLanguage) }
+                    }
+                    .id(pair)
+                }
                 Toggle("默认显示原文", isOn: $settings.showOriginal)
-                Text("源语言固定为韩语。翻译完全在本机进行（Apple 翻译），不联网。")
+                Text("自动检测：逐条判断语言，已经是目标语言的消息不翻译；词表注释只用于韩语消息、中文译文。翻译完全在本机进行（Apple 翻译），不联网。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            .task(id: settings.sourceLanguage + "|" + settings.targetLanguage) {
+                downloadPair = nil
+                await languages.refresh(source: settings.sourceLanguage, target: settings.targetLanguage)
             }
 
             Section("显示方式") {
@@ -106,5 +130,49 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(minWidth: 460, minHeight: 560)
         .onAppear { loginItem.refresh() }
+    }
+
+    @ViewBuilder
+    private var languageStatusRows: some View {
+        let source = settings.sourceLanguage
+        let target = settings.targetLanguage
+        if source != LanguageCatalog.autoID && LanguageCatalog.sameFamily(source, target) {
+            LabeledContent("状态") { Text("原文与目标语言相同，不会翻译").foregroundStyle(.orange) }
+        } else if source != LanguageCatalog.autoID {
+            let status = languages.statuses[source]
+            LabeledContent("状态（\(LanguagePair(source: source, target: target).displayName)）") {
+                HStack {
+                    Text(LanguageStatusModel.statusText(status))
+                        .foregroundStyle(status == .ready ? Color.secondary : Color.orange)
+                    if status == .needsDownload {
+                        Button("下载…") { downloadPair = LanguagePair(source: source, target: target) }
+                    }
+                }
+            }
+        } else {
+            LabeledContent("已安装（→\(LanguageCatalog.displayName(target))）") {
+                Text(languages.checking && languages.statuses.isEmpty ? "检测中…"
+                     : names(languages.installed)).multilineTextAlignment(.trailing)
+            }
+            if !languages.needsDownload.isEmpty {
+                LabeledContent("需要下载") {
+                    Menu("下载…") {
+                        ForEach(languages.needsDownload, id: \.self) { s in
+                            Button(LanguagePair(source: s, target: target).displayName) {
+                                downloadPair = LanguagePair(source: s, target: target)
+                            }
+                        }
+                    }
+                    .fixedSize()
+                }
+                Text(names(languages.needsDownload))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func names(_ ids: [String]) -> String {
+        ids.isEmpty ? "无" : ids.map(LanguageCatalog.displayName).joined(separator: "、")
     }
 }

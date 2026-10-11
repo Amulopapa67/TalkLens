@@ -28,6 +28,8 @@ final class AppController {
     let manager: SessionManager
     let loginItem: LoginItemController
     let presenter = WindowPresenter()
+    /// Supported languages / pair status shown in settings.
+    let languageStatus: LanguageStatusModel
     private(set) var panel: PanelController?
     /// Shared NSEvent monitors of all inline overlays.
     private let eventHub = InlineEventHub()
@@ -50,7 +52,8 @@ final class AppController {
         self.settings = settings
         diagnostics = Diagnostics()
         glossaryStore = GlossaryStore(bundle: .main, loadUser: true)
-        service = TranslationService(engine: engine, target: settings.targetLocale)
+        service = TranslationService(engine: engine, source: settings.fallbackSourceLocale, target: settings.targetLocale)
+        languageStatus = LanguageStatusModel(service: service)
         idleModel = SidebarViewModel(service: service, glossary: glossaryStore.merged, settings: settings,
                                      diagnostics: diagnostics, channel: "idle")
         sidebarHost = SidebarModelHost(model: idleModel)
@@ -69,7 +72,8 @@ final class AppController {
         let actions = SidebarActions(
             openOnboarding: { [weak self] in self?.showOnboarding() },
             openSettings: { [weak self] in self?.showSettings() },
-            resume: { [weak self] in self?.settings.paused = false }
+            resume: { [weak self] in self?.settings.paused = false },
+            downloadLanguages: { [weak self] pair in self?.showLanguageDownload(pair) }
         )
         panel = PanelController(rootView: SidebarRootView(host: sidebarHost, settings: settings, actions: actions),
                                 settings: settings)
@@ -310,10 +314,10 @@ final class AppController {
 
     private func settingChanged(_ key: AppSettings.Key) {
         switch key {
-        case .targetLanguage:
-            for model in allModels { model.retarget(settings.targetLanguage) }
+        case .sourceLanguage, .targetLanguage:
+            for model in allModels { model.languagesChanged() }
             Task { [weak self] in
-                // After the retarget reached the service: the new pair may need a download.
+                // After the change reached the service: the new pair may need a download.
                 try? await Task.sleep(for: .milliseconds(100))
                 await self?.refreshEngineStatus()
             }
@@ -367,15 +371,18 @@ final class AppController {
             Task { [weak self] in await self?.refreshEngineStatus() }
         }
         onboardingModel = onboarding
+        onboarding.sourceLanguage = settings.fallbackSourceLocale
         let target = settings.targetLocale
-        let targetName = AppSettings.targetLanguages.first { $0.id == settings.targetLanguage }?.name
-            ?? settings.targetLanguage
+        let targetName = LanguageCatalog.displayName(settings.targetLanguage)
+        let fallback = settings.languages.fallbackSource
+        let sourceName = settings.sourceLanguageID == nil
+            ? "\(LanguageCatalog.displayName(fallback))（自动检测）" : LanguageCatalog.displayName(fallback)
         presenter.show(id: "onboarding", title: "TalkLens 引导", size: CGSize(width: 480, height: 460),
                        onClose: { [weak self] in
                            self?.onboardingModel?.stop()
                            self?.onboardingModel = nil
                        }) {
-            OnboardingView(model: onboarding, target: target, targetName: targetName,
+            OnboardingView(model: onboarding, target: target, sourceName: sourceName, targetName: targetName,
                            done: { [weak self] in self?.presenter.close("onboarding") })
         }
     }
@@ -383,8 +390,39 @@ final class AppController {
     func showSettings() {
         presenter.show(id: "settings", title: "TalkLens 设置", size: CGSize(width: 480, height: 620)) {
             SettingsView(settings: settings, glossary: glossaryStore, loginItem: loginItem,
-                         reloadGlossary: { [weak self] in self?.reloadGlossary() })
+                         reloadGlossary: { [weak self] in self?.reloadGlossary() },
+                         languages: languageStatus,
+                         languagesInstalled: { [weak self] in self?.languagesInstalled() })
         }
+    }
+
+    /// Shows the system download prompt for one pair (must be a visible window: `prepareTranslation()`).
+    func showLanguageDownload(_ pair: LanguagePair) {
+        let id = "download-\(pair.source)-\(pair.target)"
+        presenter.show(id: id, title: "下载翻译语言", size: CGSize(width: 440, height: 220)) {
+            LanguageDownloadPrompt(source: Locale.Language(identifier: pair.source),
+                                   target: Locale.Language(identifier: pair.target)) { [weak self] installed in
+                if installed {
+                    self?.languagesInstalled()
+                    self?.presenter.close(id)
+                }
+            }
+        }
+    }
+
+    /// A pair was downloaded: forget cached statuses and re-submit failed messages everywhere.
+    func languagesInstalled() {
+        Task { [weak self] in
+            guard let self else { return }
+            await self.service.invalidateLanguageStatus()
+            await self.refreshEngineStatus()
+            for model in self.allModels { model.retryFailed() }
+        }
+    }
+
+    /// Every pair (over all followed chat windows) that failed because it is not installed.
+    var missingPairs: [LanguagePair] {
+        Array(Set(allModels.flatMap(\.missingPairs))).sorted { $0.description < $1.description }
     }
 
     func showAbout() {
@@ -407,7 +445,8 @@ final class AppController {
             let c = focused.model.counts
             let windows = manager.sessions.count
             let prefix = windows > 1 ? "状态：跟随 \(windows) 个窗口 · 当前" : "状态：跟随中"
-            return "\(prefix) · \(c.rows) 条 · 已译 \(c.done)"
+            let missing = missingPairs.isEmpty ? "" : " · 缺 \(missingPairs.count) 个语言对"
+            return "\(prefix) · \(c.rows) 条 · 已译 \(c.done)\(missing)"
         }
     }
 }

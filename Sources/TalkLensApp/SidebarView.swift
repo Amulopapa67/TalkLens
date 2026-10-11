@@ -10,6 +10,8 @@ struct SidebarActions {
     var openOnboarding: @MainActor () -> Void
     var openSettings: @MainActor () -> Void
     var resume: @MainActor () -> Void
+    /// Opens the system download prompt for a language pair (D-023).
+    var downloadLanguages: @MainActor (LanguagePair) -> Void = { _ in }
 }
 
 /// The only pasteboard write in TalkLens: triggered by the user's "复制译文" click.
@@ -69,6 +71,32 @@ struct SidebarView: View {
     }
 
     private var engineBanner: AnyView? {
+        let missing = model.missingPairs.sorted { $0.description < $1.description }
+        if let text = FailureReason.missingPairsBanner(missing) {
+            return AnyView(
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.down.circle.fill").foregroundStyle(.orange)
+                    Text(text).font(.caption).lineLimit(2)
+                    Spacer()
+                    if missing.count == 1, let pair = missing.first {
+                        Button("下载…") { actions.downloadLanguages(pair) }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                    } else {
+                        Menu("下载…") {
+                            ForEach(missing, id: \.self) { pair in
+                                Button(pair.displayName) { actions.downloadLanguages(pair) }
+                            }
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .font(.caption)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+            )
+        }
         guard let status = model.engineStatus, status != .ready else { return nil }
         let text: String
         if status == .needsDownload {

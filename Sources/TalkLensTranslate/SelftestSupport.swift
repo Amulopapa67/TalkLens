@@ -3,6 +3,7 @@
 // Kept in this module so they can be unit-tested (the test target cannot import the tlctl executable).
 
 import Foundation
+import TalkLensCore
 
 public struct SelftestOptions: Sendable, Equatable {
     public var engine: String = "apple"
@@ -16,8 +17,11 @@ public struct SelftestOptions: Sendable, Equatable {
 
     public init() {}
 
+    /// `--source auto`: detect each line's language.
+    public var isAuto: Bool { source == LanguageCatalog.autoID }
+
     public static let usage =
-        "usage: tlctl selftest --engine apple|mock --source ko --target zh-Hans --input FILE [--batch] [--timeout SECONDS]"
+        "usage: tlctl selftest --engine apple|mock --source ko|auto|LANG --target zh-Hans --input FILE [--batch] [--timeout SECONDS]"
 
     public enum ParseError: Error, Equatable, CustomStringConvertible {
         case missingValue(String)
@@ -64,7 +68,50 @@ public struct SelftestOptions: Sendable, Equatable {
     }
 }
 
+/// Which lines a selftest sends, and with which source language.
+public struct SelftestPlan: Sendable, Equatable {
+    public struct Item: Sendable, Equatable {
+        public let index: Int
+        public let text: String
+        public let source: String
+    }
+    /// Lines to translate, in input order.
+    public let items: [Item]
+    /// Indexes of lines already in the target language (auto only; not sent).
+    public let alreadyTarget: [Int]
+    /// Distinct sources in first-use order.
+    public var sources: [String] {
+        var seen = Set<String>()
+        return items.map(\.source).filter { seen.insert($0).inserted }
+    }
+    /// Lines per source (numbers only).
+    public var sourceCounts: [String: Int] {
+        items.reduce(into: [:]) { $0[$1.source, default: 0] += 1 }
+    }
+}
+
 public enum SelftestSupport {
+    /// Fixed source: every line with that source. `auto`: per-line detection
+    /// (`ChatPreprocessor.detectSourceLanguage`); undecidable lines (emoji, numbers) use Korean; lines in the
+    /// target language family are not sent.
+    public static func plan(lines: [String], source: String, target: String) -> SelftestPlan {
+        guard source == LanguageCatalog.autoID else {
+            return SelftestPlan(items: lines.enumerated().map { .init(index: $0.offset, text: $0.element, source: source) },
+                                alreadyTarget: [])
+        }
+        var items: [SelftestPlan.Item] = []
+        var kept: [Int] = []
+        for (i, line) in lines.enumerated() {
+            let detected = ChatPreprocessor.detectSourceLanguage(line) ?? LanguageCatalog.fallbackSource
+            if LanguageCatalog.sameFamily(detected, target) {
+                kept.append(i)
+            } else {
+                items.append(.init(index: i, text: line, source: detected))
+            }
+        }
+        return SelftestPlan(items: items, alreadyTarget: kept)
+    }
+
     /// Parses the selftest input: skips blank lines and lines starting with `#`; a literal `\n` becomes a newline.
     public static func parseInput(_ contents: String) -> [String] {
         contents

@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
-// Normalization, classification, segmentation and glossary annotation (docs/architecture.md §4.4).
+// Normalization, classification, segmentation and glossary annotation (docs/architecture.md §4.4; multi-language
+// source per D-023).
 
 import Foundation
 import NaturalLanguage
 
 public struct ChatPreprocessor: Sendable {
     public let glossary: Glossary
+    /// Catalog id of the chat's source language, or nil to detect it per message (D-023).
+    /// "ko" keeps the original Korean rules exactly (Hangul word share + NLLanguageRecognizer).
+    public let sourceLanguage: String?
     /// BCP-47 target language, e.g. "zh-Hans", "en", "ja".
     public let targetLanguage: String
     public let glossaryEnabled: Bool
@@ -15,13 +19,35 @@ public struct ChatPreprocessor: Sendable {
     /// Minimum share of letter-bearing words that contain Hangul syllables for a message to count as Korean
     /// without asking NLLanguageRecognizer.
     public static let hangulShareThreshold = 0.3
+    /// Auto-detect: below this detection confidence a message is left untranslated (cannot tell its language).
+    public static let autoMinimumConfidence = 0.25
+    /// Fixed source: a message confidently detected as a third language (neither source nor target) at or
+    /// above this confidence is left untranslated.
+    public static let otherLanguageConfidence = 0.8
 
-    public init(glossary: Glossary, targetLanguage: String = "zh-Hans", glossaryEnabled: Bool = true,
-                maxSegmentLength: Int = 1000) {
+    /// - sourceLanguage: catalog id ("ko", "en", "ja", …), or nil / "auto" for per-message detection. The
+    ///   default "ko" matches the behaviour before D-023 (replay / golden use it).
+    public init(glossary: Glossary, sourceLanguage: String? = "ko", targetLanguage: String = "zh-Hans",
+                glossaryEnabled: Bool = true, maxSegmentLength: Int = 1000) {
         self.glossary = glossary
+        if let s = sourceLanguage, s != LanguageCatalog.autoID {
+            self.sourceLanguage = LanguageCatalog.canonicalID(s) ?? s
+        } else {
+            self.sourceLanguage = nil
+        }
         self.targetLanguage = targetLanguage
         self.glossaryEnabled = glossaryEnabled
         self.maxSegmentLength = max(1, maxSegmentLength)
+    }
+
+    /// Classification result: the kind plus the source language used when the message is translated.
+    struct Decision: Equatable {
+        let kind: MessageKind
+        let source: String?
+        init(_ kind: MessageKind, source: String? = nil) {
+            self.kind = kind
+            self.source = kind == .translate ? source : nil
+        }
     }
 
     // MARK: - Public API
@@ -31,19 +57,25 @@ public struct ChatPreprocessor: Sendable {
             return result(message, .system)
         }
         let normalized = Self.normalize(message.body)
-        let kind = classify(normalized: normalized)
+        let decision = decide(normalized: normalized)
+        let kind = decision.kind
+        // The bundled / user glossary is Korean → Chinese: it only applies to Korean messages, and its Chinese
+        // glosses (chips, jamo notes) are only shown for a Chinese target (D-023).
+        let glossaryOn = glossaryEnabled && glossaryApplies(decision, text: normalized)
+        let showGlosses = glossaryOn && LanguageCatalog.isChinese(targetLanguage)
         let chips: [GlossaryChip]
         switch kind {
         case .system, .empty, .urlOnly:
             chips = []
         default:
-            chips = glossaryEnabled ? glossary.chips(in: normalized) : []
+            chips = showGlosses ? glossary.chips(in: normalized) : []
         }
         switch kind {
         case .translate:
-            let segments = makeSegments(normalized)
-            // Defensive: every translate-classified message has a Hangul syllable outside URLs/mentions, so at
-            // least one segment is sent; if not, there is nothing to translate.
+            let source = decision.source ?? LanguageCatalog.fallbackSource
+            let segments = makeSegments(normalized, source: source, expand: glossaryOn)
+            // Defensive: every translate-classified message has a source-script letter outside URLs/mentions,
+            // so at least one segment is sent; if not, there is nothing to translate.
             guard segments.contains(where: { if case .translate = $0 { return true } else { return false } }) else {
                 return result(message, .alreadyTarget, chips: chips)
             }
@@ -53,12 +85,24 @@ public struct ChatPreprocessor: Sendable {
                 }
             }.joined()
             return PreprocessedMessage(message: message, kind: .translate, textForMT: textForMT,
-                                       segments: segments, chips: chips, note: nil)
+                                       segments: segments, chips: chips, note: nil, sourceLanguage: source)
         case .jamoOnly:
             let note = chips.isEmpty ? nil : chips.map(\.gloss).joined(separator: " · ")
             return result(message, .jamoOnly, chips: chips, note: note)
         default:
             return result(message, kind, chips: chips)
+        }
+    }
+
+    /// Korean glossary applies: fixed source ko; or auto-detect and the message is Korean (translated as ko,
+    /// or not translated but containing Hangul, e.g. "ㅋㅋ" or a Korean message with a Korean target).
+    private func glossaryApplies(_ decision: Decision, text: String) -> Bool {
+        switch sourceLanguage {
+        case "ko": return true
+        case nil:
+            if let s = decision.source { return s == "ko" }
+            return text.unicodeScalars.contains { TextScan.isHangulSyllable($0) || TextScan.isCompatibilityJamo($0) }
+        default: return false
         }
     }
 
@@ -120,7 +164,12 @@ public struct ChatPreprocessor: Sendable {
 
     /// Decision for a normalized, non-system message.
     func classify(normalized text: String) -> MessageKind {
-        if text.isEmpty { return .empty }
+        decide(normalized: text).kind
+    }
+
+    /// Kind and (for `.translate`) the source language of a normalized, non-system message.
+    func decide(normalized text: String) -> Decision {
+        if text.isEmpty { return Decision(.empty) }
 
         // URLs and @mentions never decide the language; classify what is left.
         let ns = text as NSString
@@ -133,22 +182,79 @@ public struct ChatPreprocessor: Sendable {
         let restTrimmed = rest.trimmingCharacters(in: .whitespacesAndNewlines)
         if restTrimmed.isEmpty {
             // Only URLs and/or mentions.
-            return urlMatches.isEmpty ? .alreadyTarget : .urlOnly
+            return Decision(urlMatches.isEmpty ? .alreadyTarget : .urlOnly)
         }
 
-        if Self.isEmojiOnly(restTrimmed) { return .emojiOnly }
-        if Self.isJamoOnly(restTrimmed) { return .jamoOnly }
-        if Self.isNumberOrTimeOnly(restTrimmed) { return .numberOrTimeOnly }
+        if Self.isEmojiOnly(restTrimmed) { return Decision(.emojiOnly) }
+        // Jamo shorthand (ㅋㅋ, ㅇㅋ) is Korean-specific: only for a Korean or auto-detected source.
+        if sourceLanguage == nil || sourceLanguage == "ko", Self.isJamoOnly(restTrimmed) { return Decision(.jamoOnly) }
+        if Self.isNumberOrTimeOnly(restTrimmed) { return Decision(.numberOrTimeOnly) }
 
+        switch sourceLanguage {
+        case "ko": return Decision(koreanKind(restTrimmed), source: "ko")
+        case nil: return autoDecision(restTrimmed)
+        case let source?: return fixedDecision(restTrimmed, source: source)
+        }
+    }
+
+    /// The Korean rules from before D-023, unchanged.
+    private func koreanKind(_ restTrimmed: String) -> MessageKind {
         // No Hangul syllables → nothing for a ko→X engine to do.
         guard TextScan.containsHangulSyllable(restTrimmed) else { return .alreadyTarget }
         if targetLanguage.lowercased().hasPrefix("ko") { return .alreadyTarget }
+        return Self.isKorean(restTrimmed) ? .translate : .alreadyTarget
+    }
 
-        if Self.hangulWordShare(restTrimmed) >= Self.hangulShareThreshold { return .translate }
-        // Mostly non-Korean with a few Korean words: ask the language recognizer.
+    /// Hangul word share ≥ threshold, or (mostly non-Korean with a few Korean words) the recognizer says Korean.
+    /// The caller has checked that the text contains Hangul syllables.
+    private static func isKorean(_ text: String) -> Bool {
+        if hangulWordShare(text) >= hangulShareThreshold { return true }
         let recognizer = NLLanguageRecognizer()
-        recognizer.processString(restTrimmed)
-        return recognizer.dominantLanguage == .korean ? .translate : .alreadyTarget
+        recognizer.processString(text)
+        return recognizer.dominantLanguage == .korean
+    }
+
+    /// Auto-detect: Korean by the Korean rules first, otherwise the dominant language by script /
+    /// NLLanguageRecognizer. Messages in the target language family, or of undecidable language, are kept.
+    private func autoDecision(_ restTrimmed: String) -> Decision {
+        guard let language = Self.detectSourceLanguage(restTrimmed) else { return Decision(.alreadyTarget) }
+        if LanguageCatalog.sameFamily(language, targetLanguage) { return Decision(.alreadyTarget) }
+        return Decision(.translate, source: language)
+    }
+
+    /// The auto-detect rule on its own (also used by `tlctl selftest --source auto`): URLs / mentions are
+    /// ignored, Korean is decided by the Korean rules, everything else by `LanguageDetector`; nil when the
+    /// language cannot be told (no letters, unknown script, or confidence below `autoMinimumConfidence`).
+    public static func detectSourceLanguage(_ text: String) -> String? {
+        let ns = text as NSString
+        let rest = protectedRegex.regex.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: ns.length),
+                                                                 withTemplate: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if TextScan.containsHangulSyllable(rest), isKorean(rest) { return "ko" }
+        guard let detected = LanguageDetector.detect(rest), detected.confidence >= autoMinimumConfidence else {
+            return nil
+        }
+        return detected.language
+    }
+
+    /// Fixed non-Korean source: translate as `source` unless the message has no letters of the source script,
+    /// is in the target language, or is confidently a third language.
+    private func fixedDecision(_ restTrimmed: String, source: String) -> Decision {
+        if LanguageCatalog.sameFamily(source, targetLanguage) { return Decision(.alreadyTarget) }
+        guard LanguageDetector.containsLetters(of: LanguageCatalog.script(of: source), in: restTrimmed) else {
+            return Decision(.alreadyTarget)
+        }
+        if let detected = LanguageDetector.detect(restTrimmed, hint: source) {
+            let d = detected.language
+            if LanguageCatalog.sameFamily(d, targetLanguage) { return Decision(.alreadyTarget) }
+            // Han-only text is ambiguous between Chinese and Japanese (kanji): trust the chosen source.
+            let hanAmbiguous = source == "ja" && LanguageCatalog.isChinese(d)
+            if !LanguageCatalog.sameFamily(d, source), !hanAmbiguous,
+               detected.confidence >= Self.otherLanguageConfidence {
+                return Decision(.alreadyTarget)
+            }
+        }
+        return Decision(.translate, source: source)
     }
 
     /// Share of whitespace-separated words containing a letter that contain at least one Hangul syllable.
@@ -238,10 +344,13 @@ public struct ChatPreprocessor: Sendable {
     static let protectedRegex = CompiledRegex(
         #"(?:https?://|www\.)[^\s]+|(?<![\w@])@[^\s,.!?:;()\[\]{}"'<>]+"#, options: [.caseInsensitive])
 
-    /// Splits `text` into keep (URLs, mentions, line breaks, surrounding whitespace, runs without any Hangul
-    /// syllable) and translate pieces,
+    /// Splits `text` into keep (URLs, mentions, line breaks, surrounding whitespace, runs without any letter of
+    /// the source script — for Korean: without any Hangul syllable) and translate pieces,
     /// applies glossary `expand` to translate pieces, and splits long pieces at sentence boundaries.
-    func makeSegments(_ text: String) -> [MTSegment] {
+    /// - expand: apply glossary expansions (nil = `glossaryEnabled`).
+    func makeSegments(_ text: String, source: String = "ko", expand: Bool? = nil) -> [MTSegment] {
+        let script = LanguageCatalog.script(of: source)
+        let doExpand = expand ?? glossaryEnabled
         var out: [MTSegment] = []
         let lines = text.components(separatedBy: "\n")
         for (li, line) in lines.enumerated() {
@@ -252,13 +361,13 @@ public struct ChatPreprocessor: Sendable {
             for m in matches {
                 if m.range.location > cursor {
                     appendTranslatable(ns.substring(with: NSRange(location: cursor, length: m.range.location - cursor)),
-                                       to: &out)
+                                       script: script, expand: doExpand, to: &out)
                 }
                 out.append(.keep(ns.substring(with: m.range)))
                 cursor = m.range.location + m.range.length
             }
             if cursor < ns.length {
-                appendTranslatable(ns.substring(from: cursor), to: &out)
+                appendTranslatable(ns.substring(from: cursor), script: script, expand: doExpand, to: &out)
             }
         }
         return out
@@ -266,7 +375,8 @@ public struct ChatPreprocessor: Sendable {
 
     /// Adds a translatable run: leading/trailing whitespace become keep segments; the core is expanded
     /// and split to ≤ maxSegmentLength characters.
-    private func appendTranslatable(_ piece: String, to out: inout [MTSegment]) {
+    private func appendTranslatable(_ piece: String, script: LanguageScript, expand: Bool,
+                                    to out: inout [MTSegment]) {
         guard !piece.isEmpty else { return }
         let core = piece.trimmingCharacters(in: .whitespaces)
         if core.isEmpty {
@@ -276,15 +386,15 @@ public struct ChatPreprocessor: Sendable {
         let leading = piece.prefix { $0.isWhitespace }
         let trailing = String(piece.reversed().prefix { $0.isWhitespace }.reversed())
         if !leading.isEmpty { out.append(.keep(String(leading))) }
-        let expanded = glossaryEnabled ? glossary.expandInline(core) : core
-        if TextScan.containsHangulSyllable(expanded) {
-            // Chunks of a long run that happen to carry no Hangul syllable are kept as well.
+        let expanded = expand ? glossary.expandInline(core) : core
+        if LanguageDetector.containsLetters(of: script, in: expanded) {
+            // Chunks of a long run that happen to carry no source-script letter are kept as well.
             out.append(contentsOf: splitLong(expanded).map { seg in
-                if case .translate(let t) = seg, !TextScan.containsHangulSyllable(t) { return .keep(t) }
+                if case .translate(let t) = seg, !LanguageDetector.containsLetters(of: script, in: t) { return .keep(t) }
                 return seg
             })
         } else {
-            // Nothing for a ko→X engine to do ("ㅋㅋㅋ", "12345", emoji, an English line): shown verbatim.
+            // Nothing for a source→X engine to do (for ko: "ㅋㅋㅋ", "12345", emoji, an English line): verbatim.
             // Decided after `expand`, so an abbreviation that expands to Hangul ("ㅇㅋ" → "오케이") is still sent.
             out.append(.keep(core))
         }

@@ -24,7 +24,7 @@ func printUsage() {
       replay <dir|file> --engine mock [--golden DIR] [--update-golden] [--glossary F]
                                              offline: parse + preprocess + mock-translate .axjson snapshots
       bench <dir> [--iterations 50]          offline: parse/diff p50/p95 against the budget
-      selftest --engine apple --source ko --target zh-Hans --input F
+      selftest --engine apple --source ko|auto --target zh-Hans --input F
                                              Apple Translation latency self-test
 
     exit codes: 0 OK, 3 SKIP (reason on the last line), 1 FAIL

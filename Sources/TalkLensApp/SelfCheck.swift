@@ -14,7 +14,8 @@ enum SelfCheck {
         let settings = AppSettings(defaults: nil)
         let diagnostics = Diagnostics()
         let glossary = GlossaryStore(bundle: .main, loadUser: false)
-        let service = TranslationService(engine: MockEngine(), target: settings.targetLocale)
+        let service = TranslationService(engine: MockEngine(), source: settings.fallbackSourceLocale,
+                                         target: settings.targetLocale)
         let model = SidebarViewModel(service: service, glossary: glossary.merged, settings: settings,
                                      diagnostics: diagnostics)
         // Constructed (not started) to make sure the live components initialise without side effects.

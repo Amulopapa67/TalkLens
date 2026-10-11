@@ -9,7 +9,7 @@ import TalkLensCore
 @Observable
 final class AppSettings {
     enum Key: String, CaseIterable {
-        case targetLanguage, showOriginal, fontSize, opacity, edge, panelWidth
+        case sourceLanguage, targetLanguage, showOriginal, fontSize, opacity, edge, panelWidth
         case glossaryEnabled, pinned, sidebarVisible, paused, onboardingShown, displayMode
     }
 
@@ -28,17 +28,8 @@ final class AppSettings {
         }
     }
 
-    struct LanguageOption: Hashable, Sendable {
-        let id: String
-        let name: String
-    }
-
-    static let targetLanguages: [LanguageOption] = [
-        LanguageOption(id: "zh-Hans", name: "简体中文"),
-        LanguageOption(id: "zh-Hant", name: "繁體中文"),
-        LanguageOption(id: "en", name: "English"),
-        LanguageOption(id: "ja", name: "日本語"),
-    ]
+    /// Every selectable target language (the source picker adds "自动检测"); see LanguageCatalog (D-023).
+    static let targetLanguages: [LanguageOption] = LanguageCatalog.all
 
     static let fontSizeRange: ClosedRange<Double> = 11...20
     static let opacityRange: ClosedRange<Double> = 0.5...1.0
@@ -53,6 +44,8 @@ final class AppSettings {
     /// Called after a preference changes (not during init).
     @ObservationIgnored var onChange: ((Key) -> Void)?
 
+    /// "auto" (detect per message) or a catalog id.
+    var sourceLanguage: String { didSet { save(.sourceLanguage, sourceLanguage) } }
     var targetLanguage: String { didSet { save(.targetLanguage, targetLanguage) } }
     var showOriginal: Bool { didSet { save(.showOriginal, showOriginal) } }
     var fontSize: Double { didSet { save(.fontSize, fontSize) } }
@@ -73,8 +66,9 @@ final class AppSettings {
         func value<T>(_ key: Key, _ fallback: T) -> T {
             (defaults?.object(forKey: AppSettings.storageKey(key)) as? T) ?? fallback
         }
-        let lang: String = value(.targetLanguage, "zh-Hans")
-        targetLanguage = AppSettings.targetLanguages.contains { $0.id == lang } ? lang : "zh-Hans"
+        let languages = LanguagePreferences.load(from: defaults)
+        sourceLanguage = languages.source
+        targetLanguage = languages.target
         showOriginal = value(.showOriginal, false)
         fontSize = AppSettings.clamp(value(.fontSize, 13.0), AppSettings.fontSizeRange)
         // Background opacity of the sidebar (text always stays fully opaque).
@@ -90,6 +84,12 @@ final class AppSettings {
     }
 
     var targetLocale: Locale.Language { Locale.Language(identifier: targetLanguage) }
+
+    var languages: LanguagePreferences { LanguagePreferences(source: sourceLanguage, target: targetLanguage) }
+    /// Source for ChatPreprocessor: nil = auto-detect.
+    var sourceLanguageID: String? { languages.sourceLanguage }
+    /// Source for status checks and messages without a detected language (Korean when auto).
+    var fallbackSourceLocale: Locale.Language { Locale.Language(identifier: languages.fallbackSource) }
 
     private static func storageKey(_ key: Key) -> String { "talklens." + key.rawValue }
 

@@ -146,12 +146,12 @@ public struct ReplayOutput: Encodable {
 public enum ReplayRenderer {
     /// Parses one recorded snapshot and renders the replay output.
     /// `translate` maps one MT segment to its translation (MockEngine in tlctl).
-    public static func render(name: String, file: AXSnapshotFile, glossary: Glossary, targetLanguage: String = "zh-Hans",
-                              parser: TranscriptParser? = nil, translate: (String) -> String) throws -> ReplayOutput {
+    public static func render(name: String, file: AXSnapshotFile, glossary: Glossary, sourceLanguage: String? = "ko",
+                              targetLanguage: String = "zh-Hans", parser: TranscriptParser? = nil, translate: (String) -> String) throws -> ReplayOutput {
         let p = parser ?? TranscriptParser(referenceYear: file.recordedYear ?? 2026)
         guard let parsed = p.parse(window: file.root) else { throw ReplayError.transcriptNotFound }
         let messages = MessageIdentity.assign(parsed, chatKey: MessageIdentity.chatKey(forTitle: file.window.title))
-        let pre = ChatPreprocessor(glossary: glossary, targetLanguage: targetLanguage)
+        let pre = ChatPreprocessor(glossary: glossary, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage)
         let out: [ReplayOutput.Message] = messages.map { m in
             let pm = pre.process(m)
             let translation: String? = pm.kind == .translate

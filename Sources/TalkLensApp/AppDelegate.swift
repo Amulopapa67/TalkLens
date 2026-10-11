@@ -3,6 +3,7 @@
 
 import AppKit
 import os
+import TalkLensCore
 
 private let logger = Logger.talkLens("app")
 
@@ -19,6 +20,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                             action: #selector(selectInlineMode), keyEquivalent: "")
     private let sidebarModeItem = NSMenuItem(title: AppSettings.DisplayMode.sidebar.name,
                                              action: #selector(selectSidebarMode), keyEquivalent: "")
+    /// "目标语言" submenu for quick switching (D-023).
+    private let targetLanguageItem = NSMenuItem(title: "目标语言", action: nil, keyEquivalent: "")
+    private var targetLanguageItems: [NSMenuItem] = []
+    /// Shown only while some auto-detected pair needs a download.
+    private let downloadItem = NSMenuItem(title: "下载缺少的翻译语言", action: nil, keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let controller = AppController()
@@ -64,6 +70,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(entry)
         }
         menu.addItem(.separator())
+        let targetMenu = NSMenu()
+        targetMenu.autoenablesItems = false
+        targetLanguageItems = LanguageCatalog.all.map { option in
+            let entry = NSMenuItem(title: option.name, action: #selector(selectTargetLanguage(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.representedObject = option.id
+            targetMenu.addItem(entry)
+            return entry
+        }
+        targetLanguageItem.submenu = targetMenu
+        menu.addItem(targetLanguageItem)
+        downloadItem.submenu = NSMenu()
+        downloadItem.isHidden = true
+        menu.addItem(downloadItem)
+        menu.addItem(.separator())
         menu.addItem(makeItem("设置…", #selector(openSettings), key: ","))
         menu.addItem(makeItem("权限与语言引导…", #selector(openOnboarding)))
         menu.addItem(makeItem("关于 TalkLens", #selector(openAbout)))
@@ -95,6 +116,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pinItem.isEnabled = !inline
         inlineModeItem.state = inline ? .on : .off
         sidebarModeItem.state = inline ? .off : .on
+        for entry in targetLanguageItems {
+            entry.state = (entry.representedObject as? String) == settings.targetLanguage ? .on : .off
+        }
+        targetLanguageItem.title = "目标语言：" + LanguageCatalog.displayName(settings.targetLanguage)
+        let missing = controller.missingPairs
+        downloadItem.isHidden = missing.isEmpty
+        downloadItem.submenu?.removeAllItems()
+        for pair in missing {
+            let entry = NSMenuItem(title: pair.displayName + "…", action: #selector(downloadPair(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.representedObject = [pair.source, pair.target]
+            downloadItem.submenu?.addItem(entry)
+        }
     }
 
     // MARK: - Actions
@@ -116,6 +150,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func selectInlineMode() { controller?.settings.displayMode = .inline }
     @objc private func selectSidebarMode() { controller?.settings.displayMode = .sidebar }
+
+    @objc private func selectTargetLanguage(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, let settings = controller?.settings,
+              settings.targetLanguage != id else { return }
+        settings.targetLanguage = id
+    }
+
+    @objc private func downloadPair(_ sender: NSMenuItem) {
+        guard let ids = sender.representedObject as? [String], ids.count == 2 else { return }
+        controller?.showLanguageDownload(LanguagePair(source: ids[0], target: ids[1]))
+    }
 
     @objc private func openSettings() { controller?.showSettings() }
     @objc private func openOnboarding() { controller?.showOnboarding() }

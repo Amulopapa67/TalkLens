@@ -4,6 +4,7 @@
 import KakaoAX
 import Observation
 import SwiftUI
+import TalkLensCore
 import TalkLensTranslate
 
 @MainActor
@@ -69,12 +70,14 @@ final class OnboardingModel {
         }
     }
 
-    var sourceLanguage: Locale.Language { Locale.Language(identifier: "ko") }
+    /// Source of the checked pair: the chosen source, or Korean when the source is auto-detected.
+    var sourceLanguage: Locale.Language = Locale.Language(identifier: LanguageCatalog.fallbackSource)
 }
 
 struct OnboardingView: View {
     let model: OnboardingModel
     let target: Locale.Language
+    let sourceName: String
     let targetName: String
     let done: @MainActor () -> Void
 
@@ -96,7 +99,7 @@ struct OnboardingView: View {
                 }
             }
 
-            step(ok: model.engineStatus == .ready, title: "翻译语言（韩语 → \(targetName)）",
+            step(ok: model.engineStatus == .ready, title: "翻译语言（\(sourceName) → \(targetName)）",
                  detail: engineDetail) {
                 HStack {
                     if model.engineStatus == .needsDownload {
