@@ -16,8 +16,8 @@ final class GlossaryStore {
     private(set) var bundled: Glossary = .empty
     private(set) var user: Glossary = .empty
     private(set) var merged: Glossary = .empty
-    /// Short, content-free error description for the settings window.
-    private(set) var lastError: String?
+    /// Short, content-free error for the settings window (localized at display time).
+    private(set) var lastError: UIKey?
 
     @ObservationIgnored private let bundle: Bundle
     @ObservationIgnored private let loadUser: Bool
@@ -41,7 +41,7 @@ final class GlossaryStore {
                 bundled = try Glossary.load(contentsOf: url)
             } catch {
                 bundled = .empty
-                lastError = "内置词表无法解析"
+                lastError = .glossaryErrorBundled
                 logger.error("bundled glossary parse failed")
             }
         } else {
@@ -52,7 +52,7 @@ final class GlossaryStore {
             do {
                 user = try Glossary.load(contentsOf: url)
             } catch {
-                lastError = "用户词表 JSON 格式有误（已忽略）"
+                lastError = .glossaryErrorUser
                 logger.error("user glossary parse failed")
             }
         }
@@ -69,7 +69,7 @@ final class GlossaryStore {
                 try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try Data(Self.template.utf8).write(to: url, options: .atomic)
             } catch {
-                lastError = "无法创建用户词表文件"
+                lastError = .glossaryErrorCreate
                 logger.error("user glossary create failed")
                 return
             }
@@ -79,7 +79,7 @@ final class GlossaryStore {
 
     static let template = """
     {
-      "_comment": "TalkLens user glossary. Entries override built-in entries with the same 'ko'. Fields: ko, zh (gloss shown as a chip), kind, pattern (NSRegularExpression), standalone_only (true = only when the whole message is this token), expand (replacement applied before machine translation). After editing, use Settings → 重新加载词表.",
+      "_comment": "TalkLens user glossary. Entries override built-in entries with the same 'ko'. Fields: ko, zh (gloss shown as a chip), kind, pattern (NSRegularExpression), standalone_only (true = only when the whole message is this token), expand (replacement applied before machine translation). After editing, use Settings → Glossary → Reload.",
       "version": 1,
       "source": "ko",
       "target": "zh-Hans",

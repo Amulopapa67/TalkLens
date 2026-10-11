@@ -70,47 +70,54 @@ final class OnboardingModel {
         }
     }
 
-    /// Source of the checked pair: the chosen source, or Korean when the source is auto-detected.
-    var sourceLanguage: Locale.Language = Locale.Language(identifier: LanguageCatalog.fallbackSource)
+    /// Source of the checked pair: the chosen source (Korean by default, D-024), or Korean when the source is
+    /// auto-detected.
+    var sourceLanguage: Locale.Language = Locale.Language(identifier: LanguageCatalog.defaultSource)
 }
 
 struct OnboardingView: View {
     let model: OnboardingModel
-    let target: Locale.Language
-    let sourceName: String
-    let targetName: String
+    let settings: AppSettings
     let done: @MainActor () -> Void
+
+    private var target: Locale.Language { settings.targetLocale }
+
+    /// "韩语" for a fixed source; "韩语（自动检测）" when auto-detecting (the pair checked uses Korean).
+    private var sourceName: String {
+        let name = UIStrings.languageName(settings.languages.fallbackSource, uiLanguage)
+        return settings.sourceLanguageID == nil ? tr(.autoDetected, name) : name
+    }
+
+    private var targetName: String { UIStrings.languageName(settings.targetLanguage, uiLanguage) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("欢迎使用 TalkLens")
+            Text(tr(.onboardingWelcome))
                 .font(.title2.weight(.semibold))
-            Text("TalkLens 只读取已经打开的 KakaoTalk 聊天窗口，用本机 Apple 翻译显示译文。不发送、不点击、不联网。")
+            Text(tr(.onboardingIntro))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            step(ok: model.accessibilityGranted, title: "辅助功能权限",
-                 detail: model.accessibilityGranted
-                    ? "已授权。"
-                    : "需要在 系统设置 → 隐私与安全性 → 辅助功能 中勾选 TalkLens。授权后无需重启。") {
+            step(ok: model.accessibilityGranted, title: tr(.onboardingAXTitle),
+                 detail: tr(model.accessibilityGranted ? .onboardingAXGranted : .onboardingAXNeeded)) {
                 if !model.accessibilityGranted {
-                    Button("打开系统设置…") { model.requestAccessibility() }
+                    Button(tr(.onboardingOpenSystemSettings)) { model.requestAccessibility() }
                 }
             }
 
-            step(ok: model.engineStatus == .ready, title: "翻译语言（\(sourceName) → \(targetName)）",
+            step(ok: model.engineStatus == .ready, title: tr(.onboardingLanguageTitle, sourceName, targetName),
                  detail: engineDetail) {
                 HStack {
                     if model.engineStatus == .needsDownload {
-                        Button("下载语言…") { model.showDownloadPrompt = true }
+                        Button(tr(.downloadLanguages)) { model.showDownloadPrompt = true }
                     }
-                    Button("重新检测") { model.refreshEngine() }
+                    Button(tr(.onboardingRecheck)) { model.refreshEngine() }
                         .disabled(model.checkingEngine)
                 }
             }
             if model.showDownloadPrompt {
-                LanguageDownloadPrompt(source: model.sourceLanguage, target: target) { _ in
+                LanguageDownloadPrompt(source: model.sourceLanguage, target: target, language: uiLanguage) { _ in
                     model.showDownloadPrompt = false
                     model.refreshEngine()
                 }
@@ -118,19 +125,17 @@ struct OnboardingView: View {
             }
 
             step(ok: model.kakaoRunning, title: "KakaoTalk",
-                 detail: model.kakaoRunning
-                    ? "正在运行" + (model.kakaoVersion.map { "（版本 \($0)）" } ?? "") + "。打开一个聊天窗口即可。"
-                    : "未运行。请自行打开 KakaoTalk（TalkLens 不会启动它）。") {
+                 detail: kakaoDetail) {
                 EmptyView()
             }
 
             Spacer(minLength: 0)
             HStack {
-                Text("非官方工具，与 Kakao Corp. 无关。")
+                Text(tr(.onboardingDisclaimer))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button(model.allGood ? "完成" : "稍后") { done() }
+                Button(tr(model.allGood ? .onboardingDone : .onboardingLater)) { done() }
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -140,12 +145,20 @@ struct OnboardingView: View {
         .onDisappear { model.stop() }
     }
 
+    private var kakaoDetail: String {
+        guard model.kakaoRunning else { return tr(.onboardingKakaoNotRunning) }
+        if let version = model.kakaoVersion { return tr(.onboardingKakaoRunningVersion, version) }
+        return tr(.onboardingKakaoRunning)
+    }
+
     private var engineDetail: String {
-        guard let status = model.engineStatus else { return "检测中…" }
-        if status == .ready { return "已安装。" }
-        if status == .needsDownload { return "需要下载翻译语言（系统会弹出下载对话框）。" }
-        if case .unsupported(let reason) = status { return "暂不可用：\(reason)" }
-        return "未知状态。"
+        guard let status = model.engineStatus else { return tr(.checking) }
+        if status == .ready { return tr(.engineInstalledSentence) }
+        if status == .needsDownload { return tr(.engineNeedsDownloadSentence) }
+        if case .unsupported(let reason) = status {
+            return tr(.engineUnavailable, FailureReason.unsupportedStatus(reason, language: uiLanguage))
+        }
+        return tr(.engineUnknownSentence)
     }
 
     @ViewBuilder

@@ -183,10 +183,11 @@ import Testing
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
 
+        // D-024: a fresh install defaults to Korean (auto-detect stays selectable).
         let initial = LanguagePreferences.load(from: defaults)
-        #expect(initial.source == "auto")
+        #expect(initial.source == "ko")
         #expect(initial.target == "zh-Hans")
-        #expect(initial.sourceLanguage == nil)
+        #expect(initial.sourceLanguage == "ko")
         #expect(initial.fallbackSource == "ko")
 
         LanguagePreferences(source: "ja", target: "en").save(to: defaults)
@@ -196,11 +197,11 @@ import Testing
         #expect(loaded == LanguagePreferences(source: "ja", target: "en"))
         #expect(loaded.sourceLanguage == "ja")
 
-        // Unknown stored values fall back to the defaults; regional ids are normalized.
+        // Unknown stored values fall back to the defaults (ko, D-024); regional ids are normalized.
         defaults.set("klingon", forKey: LanguagePreferences.sourceKey)
         defaults.set("zh-TW", forKey: LanguagePreferences.targetKey)
         let odd = LanguagePreferences.load(from: defaults)
-        #expect(odd.source == "auto")
+        #expect(odd.source == "ko")
         #expect(odd.target == "zh-Hant")
         #expect(LanguagePreferences.load(from: nil) == LanguagePreferences())
     }

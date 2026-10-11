@@ -45,6 +45,8 @@ public enum LanguageCatalog {
     public static let autoID = "auto"
     public static let autoOption = LanguageOption(id: autoID, name: "自动检测")
     public static let defaultTarget = "zh-Hans"
+    /// Source language for new installs (D-024): Korean. "Auto-detect" stays selectable.
+    public static let defaultSource = "ko"
     /// Source assumed for messages whose language could not be decided (and the fallback pair shown in status).
     public static let fallbackSource = "ko"
 
@@ -170,7 +172,7 @@ public struct LanguagePreferences: Equatable, Sendable {
     /// A catalog id.
     public var target: String
 
-    public init(source: String = LanguageCatalog.autoID, target: String = LanguageCatalog.defaultTarget) {
+    public init(source: String = LanguageCatalog.defaultSource, target: String = LanguageCatalog.defaultTarget) {
         self.source = LanguagePreferences.validSource(source)
         self.target = LanguagePreferences.validTarget(target)
     }
@@ -181,9 +183,10 @@ public struct LanguagePreferences: Equatable, Sendable {
     /// Source used for status checks and for messages without a detected language.
     public var fallbackSource: String { sourceLanguage ?? LanguageCatalog.fallbackSource }
 
-    /// Reads both values; anything missing or not in the catalog falls back to auto / zh-Hans.
+    /// Reads both values; anything missing or not in the catalog falls back to ko / zh-Hans (D-024). A stored
+    /// "auto" (or any stored catalog id) is kept.
     public static func load(from defaults: UserDefaults?) -> LanguagePreferences {
-        LanguagePreferences(source: defaults?.string(forKey: sourceKey) ?? LanguageCatalog.autoID,
+        LanguagePreferences(source: defaults?.string(forKey: sourceKey) ?? LanguageCatalog.defaultSource,
                             target: defaults?.string(forKey: targetKey) ?? LanguageCatalog.defaultTarget)
     }
 
@@ -194,7 +197,7 @@ public struct LanguagePreferences: Equatable, Sendable {
 
     public static func validSource(_ id: String) -> String {
         if id == LanguageCatalog.autoID { return id }
-        return LanguageCatalog.canonicalID(id) ?? LanguageCatalog.autoID
+        return LanguageCatalog.canonicalID(id) ?? LanguageCatalog.defaultSource
     }
 
     public static func validTarget(_ id: String) -> String {

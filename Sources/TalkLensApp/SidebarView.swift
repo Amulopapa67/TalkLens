@@ -14,7 +14,7 @@ struct SidebarActions {
     var downloadLanguages: @MainActor (LanguagePair) -> Void = { _ in }
 }
 
-/// The only pasteboard write in TalkLens: triggered by the user's "复制译文" click.
+/// The only pasteboard write in TalkLens: triggered by the user's "copy translation" click.
 @MainActor
 enum TranslationClipboard {
     static func copyTranslation(_ value: String) {
@@ -72,20 +72,21 @@ struct SidebarView: View {
 
     private var engineBanner: AnyView? {
         let missing = model.missingPairs.sorted { $0.description < $1.description }
-        if let text = FailureReason.missingPairsBanner(missing) {
+        let language = uiLanguage
+        if let text = FailureReason.missingPairsBanner(missing, language: language) {
             return AnyView(
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.down.circle.fill").foregroundStyle(.orange)
                     Text(text).font(.caption).lineLimit(2)
                     Spacer()
                     if missing.count == 1, let pair = missing.first {
-                        Button("下载…") { actions.downloadLanguages(pair) }
+                        Button(tr(.download)) { actions.downloadLanguages(pair) }
                             .buttonStyle(.link)
                             .font(.caption)
                     } else {
-                        Menu("下载…") {
+                        Menu(tr(.download)) {
                             ForEach(missing, id: \.self) { pair in
-                                Button(pair.displayName) { actions.downloadLanguages(pair) }
+                                Button(UIStrings.pairName(pair, language)) { actions.downloadLanguages(pair) }
                             }
                         }
                         .menuStyle(.borderlessButton)
@@ -98,18 +99,13 @@ struct SidebarView: View {
             )
         }
         guard let status = model.engineStatus, status != .ready else { return nil }
-        let text: String
-        if status == .needsDownload {
-            text = "翻译语言未安装"
-        } else {
-            text = "翻译不可用"
-        }
+        let text = tr(status == .needsDownload ? .languagesNotInstalled : .translationUnavailable)
         return AnyView(
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 Text(text).font(.caption)
                 Spacer()
-                Button("引导…") { actions.openOnboarding() }
+                Button(tr(.guide)) { actions.openOnboarding() }
                     .buttonStyle(.link)
                     .font(.caption)
             }
@@ -132,14 +128,14 @@ private struct SidebarHeader: View {
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .help("\(counts.rows) 条 · 已译 \(counts.done) · 待译 \(counts.pending)"
-                      + (counts.failed > 0 ? " · 失败 \(counts.failed)" : ""))
+                .help(tr(.headerCounts, counts.rows, counts.done, counts.pending)
+                      + (counts.failed > 0 ? " · " + tr(.headerFailed, counts.failed) : ""))
             if counts.pending > 0 {
                 ProgressView().controlSize(.mini)
             }
             Spacer(minLength: 4)
             if model.status == .paused {
-                Label("已暂停", systemImage: "pause.circle.fill")
+                Label(tr(.statePaused), systemImage: "pause.circle.fill")
                     .labelStyle(.titleAndIcon)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.orange)
@@ -150,7 +146,7 @@ private struct SidebarHeader: View {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(.borderless)
-            .help("设置")
+            .help(tr(.settings))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -177,9 +173,9 @@ private struct EmptyStateView: View {
                     .multilineTextAlignment(.center)
             }
             if model.status == .noPermission || model.engineStatus == .needsDownload {
-                Button("打开引导…") { actions.openOnboarding() }
+                Button(tr(.openGuide)) { actions.openOnboarding() }
             } else if model.status == .paused {
-                Button("继续翻译") { actions.resume() }
+                Button(tr(.resumeTranslation)) { actions.resume() }
             }
             Spacer()
         }
@@ -189,22 +185,22 @@ private struct EmptyStateView: View {
 
     private var title: String {
         switch model.status {
-        case .paused: return "已暂停"
-        case .noPermission: return "需要辅助功能权限"
-        case .kakaoNotRunning: return "KakaoTalk 未运行"
-        case .noChatWindow: return "打开 KakaoTalk 聊天窗口"
-        case .transcriptNotFound: return "未找到聊天记录区域"
-        case .starting: return "正在连接…"
+        case .paused: return tr(.statePaused)
+        case .noPermission: return tr(.stateNoPermission)
+        case .kakaoNotRunning: return tr(.stateKakaoNotRunning)
+        case .noChatWindow: return tr(.emptyNoChatWindow)
+        case .transcriptNotFound: return tr(.stateTranscriptNotFound)
+        case .starting: return tr(.emptyStarting)
         case .active:
-            return model.engineStatus == .needsDownload ? "翻译语言未安装" : "暂无可见消息"
+            return tr(model.engineStatus == .needsDownload ? .languagesNotInstalled : .emptyNoMessages)
         }
     }
 
     private var detail: String? {
         switch model.status {
-        case .noPermission: return "系统设置 → 隐私与安全性 → 辅助功能，勾选 TalkLens。授权后自动继续。"
-        case .noChatWindow: return "TalkLens 只读取已经打开的聊天窗口。"
-        case .transcriptNotFound: return "KakaoTalk 可能更新了界面结构。"
+        case .noPermission: return tr(.emptyNoPermissionDetail)
+        case .noChatWindow: return tr(.emptyNoChatWindowDetail)
+        case .transcriptNotFound: return tr(.emptyTranscriptNotFoundDetail)
         default: return nil
         }
     }
@@ -300,7 +296,7 @@ private struct MessageListView: View {
                         unseen = 0
                         withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
                     } label: {
-                        Label("新消息 \(unseen)", systemImage: "arrow.down")
+                        Label(tr(.newMessages, unseen), systemImage: "arrow.down")
                             .font(.system(size: 11, weight: .semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
@@ -376,18 +372,18 @@ struct MessageRowView: View {
                         .background(Circle().fill(.regularMaterial))
                 }
                 .buttonStyle(.plain)
-                .help("复制译文")
+                .help(tr(.copyTranslation))
                 .padding(2)
             }
         }
         .onHover { hovering = $0 }
-        .help(row.kind.needsTranslation ? (originalVisible ? "点击收起原文" : "点击显示原文") : "")
+        .help(row.kind.needsTranslation ? tr(originalVisible ? .clickToHideOriginal : .clickToShowOriginal) : "")
         .contextMenu {
             if let value = row.copyableTranslation {
-                Button("复制译文") { TranslationClipboard.copyTranslation(value) }
+                Button(tr(.copyTranslation)) { TranslationClipboard.copyTranslation(value) }
             }
             if row.kind.needsTranslation {
-                Button(originalVisible ? "隐藏原文" : "显示原文") { onToggleOriginal() }
+                Button(tr(originalVisible ? .hideOriginal : .showOriginal)) { onToggleOriginal() }
             }
         }
     }
@@ -399,7 +395,7 @@ struct MessageRowView: View {
                     .font(.system(size: max(9, fontSize - 2), weight: .semibold))
                     .lineLimit(1)
             } else if row.isMine {
-                Text("我")
+                Text(tr(.me))
                     .font(.system(size: max(9, fontSize - 2), weight: .semibold))
                     .foregroundStyle(.secondary)
             }
@@ -425,8 +421,8 @@ struct MessageRowView: View {
                     ProgressView().controlSize(.mini)
                     Text(row.original).font(secondary).foregroundStyle(.secondary).lineLimit(2)
                 }
-            case .failed(let reason):
-                Text(reason).font(secondary).foregroundStyle(.red)
+            case .failed(let failure):
+                Text(failure.reason(uiLanguage)).font(secondary).foregroundStyle(.red)
             case .notNeeded:
                 EmptyView()
             }
@@ -465,9 +461,9 @@ struct MessageRowView: View {
 
     private var attachmentLabel: String {
         var parts: [String] = []
-        if row.attachments.images > 0 { parts.append("图片 ×\(row.attachments.images)") }
-        if row.attachments.links > 0 { parts.append("链接 ×\(row.attachments.links)") }
-        if row.attachments.files > 0 { parts.append("文件 ×\(row.attachments.files)") }
+        if row.attachments.images > 0 { parts.append(tr(.attachImages, row.attachments.images)) }
+        if row.attachments.links > 0 { parts.append(tr(.attachLinks, row.attachments.links)) }
+        if row.attachments.files > 0 { parts.append(tr(.attachFiles, row.attachments.files)) }
         return parts.joined(separator: " · ")
     }
 }

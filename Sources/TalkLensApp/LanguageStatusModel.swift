@@ -69,10 +69,10 @@ final class LanguageStatusModel {
 
     static func statusText(_ status: EngineStatus?) -> String {
         switch status {
-        case .ready?: return "已安装"
-        case .needsDownload?: return "需要下载"
-        case .unsupported?: return "不支持"
-        case nil: return "检测中…"
+        case .ready?: return tr(.engineReady)
+        case .needsDownload?: return tr(.needsDownload)
+        case .unsupported?: return tr(.engineUnsupported)
+        case nil: return tr(.checking)
         }
     }
 }

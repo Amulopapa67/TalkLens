@@ -10,7 +10,7 @@ import TalkLensCore
 final class AppSettings {
     enum Key: String, CaseIterable {
         case sourceLanguage, targetLanguage, showOriginal, fontSize, opacity, edge, panelWidth
-        case glossaryEnabled, pinned, sidebarVisible, paused, onboardingShown, displayMode
+        case glossaryEnabled, pinned, sidebarVisible, paused, onboardingShown, displayMode, uiLanguage
     }
 
     /// How translations are shown.
@@ -20,24 +20,24 @@ final class AppSettings {
         /// Docked sidebar panel next to the chat window.
         case sidebar
 
-        var name: String {
+        var nameKey: UIKey {
             switch self {
-            case .inline: return "沉浸式（覆盖在气泡上）"
-            case .sidebar: return "侧栏"
+            case .inline: return .displayModeInline
+            case .sidebar: return .displayModeSidebar
             }
         }
     }
-
-    /// Every selectable target language (the source picker adds "自动检测"); see LanguageCatalog (D-023).
-    static let targetLanguages: [LanguageOption] = LanguageCatalog.all
 
     static let fontSizeRange: ClosedRange<Double> = 11...20
     static let opacityRange: ClosedRange<Double> = 0.5...1.0
     static let panelWidthRange: ClosedRange<Double> = 240...480
 
-    static func edgeName(_ edge: PanelEdge) -> String {
-        let names: [PanelEdge: String] = [.right: "右侧外贴", .left: "左侧外贴", .inside: "内嵌（避让输入框）"]
-        return names[edge] ?? edge.rawValue
+    static func edgeKey(_ edge: PanelEdge) -> UIKey {
+        switch edge {
+        case .right: return .edgeRight
+        case .left: return .edgeLeft
+        case .inside: return .edgeInside
+        }
     }
 
     @ObservationIgnored private let defaults: UserDefaults?
@@ -59,6 +59,8 @@ final class AppSettings {
     var paused: Bool { didSet { save(.paused, paused) } }
     var onboardingShown: Bool { didSet { save(.onboardingShown, onboardingShown) } }
     var displayMode: DisplayMode { didSet { save(.displayMode, displayMode.rawValue) } }
+    /// Interface language: follow the system (default) or a fixed language (D-024).
+    var uiLanguage: UILanguageSetting { didSet { save(.uiLanguage, uiLanguage.rawValue) } }
 
     /// `defaults == nil` keeps everything in memory (used by --self-check).
     init(defaults: UserDefaults?) {
@@ -81,6 +83,7 @@ final class AppSettings {
         paused = value(.paused, false)
         onboardingShown = value(.onboardingShown, false)
         displayMode = DisplayMode(rawValue: value(.displayMode, DisplayMode.inline.rawValue)) ?? .inline
+        uiLanguage = UILanguageSetting.load(from: defaults)
     }
 
     var targetLocale: Locale.Language { Locale.Language(identifier: targetLanguage) }

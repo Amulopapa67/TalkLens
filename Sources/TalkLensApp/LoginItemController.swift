@@ -5,6 +5,7 @@ import Foundation
 import Observation
 import os
 import ServiceManagement
+import TalkLensCore
 
 private let logger = Logger.talkLens("login-item")
 
@@ -22,11 +23,11 @@ final class LoginItemController {
 
     var statusDescription: String {
         switch status {
-        case .enabled: return "已启用"
-        case .notRegistered: return "未启用"
-        case .requiresApproval: return "需要在 系统设置 → 通用 → 登录项 中批准"
-        case .notFound: return "未找到（请从 .app 运行）"
-        @unknown default: return "未知状态"
+        case .enabled: return tr(.loginEnabled)
+        case .notRegistered: return tr(.loginNotRegistered)
+        case .requiresApproval: return tr(.loginRequiresApproval)
+        case .notFound: return tr(.loginNotFound)
+        @unknown default: return tr(.unknownState)
         }
     }
 

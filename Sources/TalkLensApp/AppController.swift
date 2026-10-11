@@ -42,6 +42,8 @@ final class AppController {
     private var workspaceObservers: [NSObjectProtocol] = []
     private var occlusionRecheckTask: Task<Void, Never>?
     private var kakaoPID: pid_t?
+    /// Called after the UI language changed (the status menu is rebuilt by AppDelegate).
+    var onUILanguageChange: (@MainActor () -> Void)?
     /// Occlusion is re-checked this often while an overlay is shown (other apps' windows move without any
     /// notification to us), and at the slow rate while one could be shown but its chat window is hidden.
     static let occlusionInterval: Duration = .milliseconds(250)
@@ -60,6 +62,7 @@ final class AppController {
         reader = AXReader()
         manager = SessionManager(reader: reader, diagnostics: diagnostics)
         loginItem = LoginItemController()
+        Localizer.shared.apply(settings.uiLanguage)
     }
 
     /// The models of every followed chat window plus the idle model.
@@ -86,6 +89,7 @@ final class AppController {
         }
 
         settings.onChange = { [weak self] key in self?.settingChanged(key) }
+        Localizer.shared.onChange = { [weak self] in self?.uiLanguageChanged() }
         manager.makeModel = { [weak self] channel in self?.makeModel(channel: channel) }
         manager.onStateChange = { [weak self] state in self?.managerStateChanged(state) }
         manager.onSessionsChanged = { [weak self] in self?.sessionsChanged() }
@@ -343,9 +347,20 @@ final class AppController {
             for model in allModels { model.setPaused(settings.paused) }
             manager.setPaused(settings.paused)
             updatePanelVisibility()
+        case .uiLanguage:
+            Localizer.shared.apply(settings.uiLanguage)
+            // A switch between "follow system" and the language it resolves to changes no text but the
+            // menu's check mark (refreshed whenever the menu opens).
         case .fontSize, .showOriginal, .onboardingShown:
             break
         }
+    }
+
+    /// SwiftUI views observe Localizer directly; AppKit titles are refreshed here.
+    private func uiLanguageChanged() {
+        logger.info("ui language=\(Localizer.shared.language.rawValue, privacy: .public)")
+        presenter.refreshTitles()
+        onUILanguageChange?()
     }
 
     func reloadGlossary() {
@@ -371,24 +386,20 @@ final class AppController {
             Task { [weak self] in await self?.refreshEngineStatus() }
         }
         onboardingModel = onboarding
+        // Checks the chosen source (Korean by default, D-024; Korean as well when auto-detecting) → target.
         onboarding.sourceLanguage = settings.fallbackSourceLocale
-        let target = settings.targetLocale
-        let targetName = LanguageCatalog.displayName(settings.targetLanguage)
-        let fallback = settings.languages.fallbackSource
-        let sourceName = settings.sourceLanguageID == nil
-            ? "\(LanguageCatalog.displayName(fallback))（自动检测）" : LanguageCatalog.displayName(fallback)
-        presenter.show(id: "onboarding", title: "TalkLens 引导", size: CGSize(width: 480, height: 460),
+        presenter.show(id: "onboarding", title: { tr(.windowOnboarding) }, size: CGSize(width: 480, height: 460),
                        onClose: { [weak self] in
                            self?.onboardingModel?.stop()
                            self?.onboardingModel = nil
                        }) {
-            OnboardingView(model: onboarding, target: target, sourceName: sourceName, targetName: targetName,
+            OnboardingView(model: onboarding, settings: settings,
                            done: { [weak self] in self?.presenter.close("onboarding") })
         }
     }
 
     func showSettings() {
-        presenter.show(id: "settings", title: "TalkLens 设置", size: CGSize(width: 480, height: 620)) {
+        presenter.show(id: "settings", title: { tr(.windowSettings) }, size: CGSize(width: 480, height: 620)) {
             SettingsView(settings: settings, glossary: glossaryStore, loginItem: loginItem,
                          reloadGlossary: { [weak self] in self?.reloadGlossary() },
                          languages: languageStatus,
@@ -399,9 +410,10 @@ final class AppController {
     /// Shows the system download prompt for one pair (must be a visible window: `prepareTranslation()`).
     func showLanguageDownload(_ pair: LanguagePair) {
         let id = "download-\(pair.source)-\(pair.target)"
-        presenter.show(id: id, title: "下载翻译语言", size: CGSize(width: 440, height: 220)) {
+        presenter.show(id: id, title: { tr(.windowDownload) }, size: CGSize(width: 440, height: 220)) {
             LanguageDownloadPrompt(source: Locale.Language(identifier: pair.source),
-                                   target: Locale.Language(identifier: pair.target)) { [weak self] installed in
+                                   target: Locale.Language(identifier: pair.target),
+                                   language: uiLanguage) { [weak self] installed in
                 if installed {
                     self?.languagesInstalled()
                     self?.presenter.close(id)
@@ -426,27 +438,33 @@ final class AppController {
     }
 
     func showAbout() {
-        presenter.show(id: "about", title: "关于 TalkLens", size: CGSize(width: 460, height: 360)) {
+        presenter.show(id: "about", title: { tr(.menuAbout) }, size: CGSize(width: 460, height: 360)) {
             AboutView(diagnostics: diagnostics)
         }
     }
 
     /// One-line, content-free status for the menu.
     var menuStatusLine: String {
-        if settings.paused { return "状态：已暂停" }
+        tr(.statusLine, menuStatusDetail)
+    }
+
+    private var menuStatusDetail: String {
+        if settings.paused { return tr(.statePaused) }
         switch manager.state {
-        case .idle: return "状态：启动中"
-        case .noPermission: return "状态：需要辅助功能权限"
-        case .kakaoNotRunning: return "状态：KakaoTalk 未运行"
-        case .noChatWindow: return "状态：没有打开的聊天窗口"
+        case .idle: return tr(.stateStarting)
+        case .noPermission: return tr(.stateNoPermission)
+        case .kakaoNotRunning: return tr(.stateKakaoNotRunning)
+        case .noChatWindow: return tr(.stateNoChatWindow)
         case .tracking:
-            guard let focused = manager.focusedSession else { return "状态：启动中" }
-            if focused.state == .transcriptNotFound { return "状态：未找到聊天记录区域" }
+            guard let focused = manager.focusedSession else { return tr(.stateStarting) }
+            if focused.state == .transcriptNotFound { return tr(.stateTranscriptNotFound) }
             let c = focused.model.counts
             let windows = manager.sessions.count
-            let prefix = windows > 1 ? "状态：跟随 \(windows) 个窗口 · 当前" : "状态：跟随中"
-            let missing = missingPairs.isEmpty ? "" : " · 缺 \(missingPairs.count) 个语言对"
-            return "\(prefix) · \(c.rows) 条 · 已译 \(c.done)\(missing)"
+            var parts = [windows > 1 ? tr(.stateFollowingMany, windows) : tr(.stateFollowingOne),
+                         tr(.stateCounts, c.rows, c.done)]
+            let missing = missingPairs.count
+            if missing > 0 { parts.append(tr(.stateMissingPairs, missing)) }
+            return parts.joined(separator: " · ")
         }
     }
 }

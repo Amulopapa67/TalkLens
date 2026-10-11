@@ -85,10 +85,13 @@ struct MultiSourceServiceTests {
         #expect(ja?.error == .notInstalled)
         let pair = LanguagePair(source: "ja", target: "zh-Hans")
         #expect(ja?.pair == pair)
-        #expect(FailureReason.describe(.notInstalled, pair: pair) == "需要下载 日本語→中文（简体） 翻译语言")
+        // D-024: language names follow the UI language (default zh-Hans).
+        #expect(FailureReason.describe(.notInstalled, pair: pair) == "需要下载 日语→简体中文 翻译语言")
+        #expect(FailureReason.describe(.notInstalled, pair: pair, language: .en)
+                == "Download needed: Japanese→Chinese (Simplified)")
         #expect(out.first { $0.id == MessageID("k") }?.text == "<ko→zh>안녕하세요")
         #expect(!engine.calls.contains { $0.source == "ja" })
-        #expect(FailureReason.missingPairsBanner([pair]) == "需要下载翻译语言：日本語→中文（简体）")
+        #expect(FailureReason.missingPairsBanner([pair]) == "需要下载翻译语言：日语→简体中文")
         #expect(FailureReason.missingPairsBanner([]) == nil)
 
         // After the download (and an invalidation) the same message goes through.

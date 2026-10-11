@@ -3,11 +3,14 @@
 // (`.translationTask` + `prepareTranslation()`); must be shown in a visible window (settings/onboarding).
 
 import SwiftUI
+import TalkLensCore
 @preconcurrency import Translation
 
 public struct LanguageDownloadPrompt: View {
     let source: Locale.Language
     let target: Locale.Language
+    /// Interface language of the prompt's text (D-024).
+    let language: UILanguage
     let onFinish: @MainActor (Bool) -> Void
 
     private enum Phase: Equatable {
@@ -23,18 +26,20 @@ public struct LanguageDownloadPrompt: View {
     @State private var configuration: TranslationSession.Configuration?
 
     /// `onFinish(true)` when the languages are installed afterwards.
-    public init(source: Locale.Language, target: Locale.Language, onFinish: @escaping @MainActor (Bool) -> Void) {
+    public init(source: Locale.Language, target: Locale.Language, language: UILanguage = .system,
+                onFinish: @escaping @MainActor (Bool) -> Void) {
         self.source = source
         self.target = target
+        self.language = language
         self.onFinish = onFinish
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Translation languages")
+            Text(UIStrings.text(.downloadTitle, language))
                 .font(.headline)
-            Text("TalkLens translates on this Mac with Apple Translation. It needs these languages downloaded: "
-                 + "\(Self.displayName(source)) and \(Self.displayName(target)). Nothing is sent over the network.")
+            Text(UIStrings.text(.downloadBody, language, Self.displayName(source, language),
+                                Self.displayName(target, language)))
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
                 Button(buttonTitle) { requestDownload() }
@@ -43,7 +48,7 @@ public struct LanguageDownloadPrompt: View {
                 Text(statusText)
                     .foregroundStyle(.secondary)
             }
-            Text("You can also download them in System Settings → General → Language & Region → Translation Languages.")
+            Text(UIStrings.text(.downloadFooter, language))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -62,18 +67,20 @@ public struct LanguageDownloadPrompt: View {
     }
 
     private var buttonTitle: String {
-        phase == .notInstalled ? "Try again" : "Download languages…"
+        UIStrings.text(phase == .notInstalled ? .downloadTryAgain : .downloadLanguages, language)
     }
 
     private var statusText: String {
+        let key: UIKey
         switch phase {
-        case .checking: return "Checking…"
-        case .needsDownload: return "Not downloaded yet"
-        case .downloading: return "Waiting for download…"
-        case .installed: return "Installed"
-        case .notInstalled: return "Still not installed"
-        case .unsupported: return "This language pair is not supported"
+        case .checking: key = .checking
+        case .needsDownload: key = .downloadNotYet
+        case .downloading: key = .downloadWaiting
+        case .installed: key = .engineReady
+        case .notInstalled: key = .downloadStillNot
+        case .unsupported: key = .downloadUnsupported
         }
+        return UIStrings.text(key, language)
     }
 
     private func requestDownload() {
@@ -96,13 +103,11 @@ public struct LanguageDownloadPrompt: View {
         if report || state == .installed { onFinish(state == .installed) }
     }
 
-    static func displayName(_ language: Locale.Language) -> String {
-        let id = language.maximalIdentifier
-        let english = Locale(identifier: "en")
-        if language.minimalIdentifier == "zh" || id.hasPrefix("zh-Hans") {
-            return "Chinese (Simplified)"
-        }
-        if id.hasPrefix("zh-Hant") { return "Chinese (Traditional)" }
-        return english.localizedString(forLanguageCode: language.languageCode?.identifier ?? id) ?? id
+    /// Localized name of a translation language (catalog languages from the UI string table; others from
+    /// Foundation in the UI language).
+    static func displayName(_ language: Locale.Language, _ ui: UILanguage) -> String {
+        if let id = LanguageCatalog.canonicalID(language) { return UIStrings.languageName(id, ui) }
+        let code = language.languageCode?.identifier ?? language.minimalIdentifier
+        return Locale(identifier: ui.rawValue).localizedString(forLanguageCode: code) ?? language.minimalIdentifier
     }
 }

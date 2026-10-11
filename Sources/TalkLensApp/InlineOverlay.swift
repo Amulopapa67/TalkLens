@@ -161,7 +161,7 @@ struct InlineLabelView: View {
             )
             .overlay(alignment: .topTrailing) {
                 if label.badge {
-                    Text("词")
+                    Text(tr(.glossaryBadge))
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 2)

@@ -24,7 +24,18 @@ enum RowTranslation: Equatable, Sendable {
     case notNeeded
     case pending
     case done(String)
-    case failed(String)
+    /// Error and pair are kept (not a rendered string) so the reason follows UI language changes (D-024).
+    case failed(TranslationFailure)
+}
+
+/// Why a row's translation failed; content-free.
+struct TranslationFailure: Equatable, Sendable {
+    let error: TranslationEngineError
+    let pair: LanguagePair?
+
+    func reason(_ language: UILanguage) -> String {
+        FailureReason.describe(error, pair: pair, language: language)
+    }
 }
 
 struct SidebarRow: Identifiable, Equatable {
@@ -470,7 +481,7 @@ final class SidebarViewModel {
             recordLatency(outcome.id)
         } else if let error = outcome.error {
             if error == .cancelled { return }
-            rows[idx].translation = .failed(FailureReason.describe(error, pair: outcome.pair))
+            rows[idx].translation = .failed(TranslationFailure(error: error, pair: outcome.pair))
             seenAt[outcome.id] = nil
             if error == .notInstalled {
                 if let pair = outcome.pair {
