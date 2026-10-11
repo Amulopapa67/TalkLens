@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //
 // String values of the accessibility roles, attributes and notifications that TalkLens reads.
-// Only read-side names live here: no action names are defined on purpose (read-only, CLAUDE.md).
+// Only read-side names live here: no action names are defined on purpose (read-only design, see README "What it never does").
 
 import Foundation
 

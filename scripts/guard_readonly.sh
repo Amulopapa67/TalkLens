@@ -9,7 +9,7 @@
 #   scripts/guard_readonly.sh --privacy  # heuristic list of logging calls that may print message text
 #                                        # (never fails; last line "PRIVACY-HEURISTIC: n hit(s)")
 #
-# Do not weaken this file to make a build pass (see CLAUDE.md). Bash 3.2 compatible (macOS /bin/bash).
+# Do not weaken this file to make a build pass (see README "What it never does"). Bash 3.2 compatible (macOS /bin/bash).
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/Sources"
@@ -80,7 +80,7 @@ if [ "$count" -eq 0 ]; then
   exit 0
 fi
 
-msg="guard_readonly: $count forbidden API use(s) in Sources/ — TalkLens must stay read-only and offline (see CLAUDE.md red lines).$report"
+msg="guard_readonly: $count forbidden API use(s) in Sources/ — TalkLens must stay read-only and offline (see README "What it never does").$report"
 if [ "$MODE" = "--hook" ]; then
   printf '%s\n' "$msg" >&2
   exit 2

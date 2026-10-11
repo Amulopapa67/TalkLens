@@ -44,7 +44,7 @@
 
 ## 3. kmsg 只读子集（Sources/KakaoAX）
 
-来源：`third_party/kmsg-upstream`，commit `54cbff7`（2026-09-21），MIT。
+来源：[kmsg](https://github.com/channprj/kmsg)，commit `54cbff7`（2026-09-21），MIT。
 
 | kmsg 文件 | 处理 | 去掉的东西 |
 |---|---|---|

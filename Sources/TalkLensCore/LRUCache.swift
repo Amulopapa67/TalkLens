@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Fixed-capacity in-memory LRU cache. Never persisted (CLAUDE.md privacy rules).
+// Fixed-capacity in-memory LRU cache. Never persisted (see PRIVACY.md).
 
 import Foundation
 

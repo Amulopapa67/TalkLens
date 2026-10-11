@@ -12,3 +12,13 @@ kakao_ax_dump*.json
 _to_delete/
 dist/
 .claude/worktrees/
+# Local development workflow files (kept on the maintainer's machine, not published)
+CLAUDE.md
+GOAL.md
+GOAL_COMMAND.txt
+启动说明.md
+.claude/
+third_party/
+docs/journal.md
+docs/STATUS.md
+docs/reviews/

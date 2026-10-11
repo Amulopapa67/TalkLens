@@ -1,7 +1,7 @@
 // translation_check.swift — reports Apple Translation language availability and, on macOS 26+,
 // translates one synthetic sentence with a UI-less session. Read-only, offline.
 // Usage: swift tools/translation_check.swift [source] [target]     (default: ko zh-Hans)
-// Written without access to a Mac; fix compile errors if any (record the fix in docs/journal.md).
+// Written without access to a Mac; fix compile errors if any.
 import Foundation
 import Translation
 
