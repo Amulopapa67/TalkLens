@@ -65,6 +65,17 @@ curl -fsSL https://raw.githubusercontent.com/Amulopapa67/TalkLens/main/scripts/i
 2. 안내가 나오면 번역 언어를 내려받으세요(최초 1회, macOS가 처리).
 3. 카카오톡 채팅창을 열면 끝입니다 🎉
 
+**방법 C: AI 어시스턴트에게 맡기기**
+
+저장소에 에이전트 스킬 [`skills/talklens-installer`](skills/talklens-installer/SKILL.md)가 들어 있습니다. Claude Code, Codex 등 `SKILL.md`를 지원하는 어시스턴트에서 쓸 수 있습니다.
+
+- Mac 상태를 확인하고;
+- 최신 버전을 내려받아 검증하고;
+- 설치한 뒤;
+- 손쉬운 사용 권한 설정을 안내합니다.
+
+무엇이든 바꾸기 전에 먼저 묻고, 채팅에는 손대지 않습니다.
+
 <details>
 <summary><b>요구 사항</b></summary>
 

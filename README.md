@@ -63,6 +63,10 @@ It downloads the latest release, verifies its SHA-256, installs it into Applicat
 2. If asked, download the translation languages (one time, done by macOS).
 3. Open any KakaoTalk chat. That's it. 🎉
 
+**Option C — let your AI assistant do it**
+
+TalkLens ships an agent skill, [`skills/talklens-installer`](skills/talklens-installer/SKILL.md), for Claude Code, Codex and other assistants that support `SKILL.md`. It checks your Mac, downloads and verifies the release, installs it, and walks you through the Accessibility permission. It asks before changing anything and never touches your chats. It is also available as a RED Skill (小红书).
+
 <details>
 <summary><b>Requirements</b></summary>
 

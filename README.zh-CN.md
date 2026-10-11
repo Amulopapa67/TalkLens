@@ -65,6 +65,17 @@ curl -fsSL https://raw.githubusercontent.com/Amulopapa67/TalkLens/main/scripts/i
 2. 如有提示，下载翻译语言（只需一次，由 macOS 完成）。
 3. 打开任意 KakaoTalk 聊天窗口，就可以用了 🎉
 
+**方式三：让你的 AI 助手帮你装**
+
+仓库里带了一个 Agent Skill：[`skills/talklens-installer`](skills/talklens-installer/SKILL.md)，可以在 Claude Code、Codex 等支持 `SKILL.md` 的 AI 助手里使用。它会：
+
+- 检查你的 Mac；
+- 下载最新版并校验；
+- 安装好；
+- 一步步带你开好辅助功能权限。
+
+每次改动都会先问你，也不会碰你的聊天。小红书上也可以通过 RED Skill 直接获取。
+
 <details>
 <summary><b>系统要求</b></summary>
 
